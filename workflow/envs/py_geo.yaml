@@ -1,0 +1,14 @@
+channels:
+  - conda-forge
+  - bioconda
+  - nodefaults
+dependencies:
+  - python=3.12
+  - numpy
+  - pandas
+  - rasterio
+  - geopandas
+  - pyogrio
+  - shapely
+  - cyvcf2
+  - matplotlib

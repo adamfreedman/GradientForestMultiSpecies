@@ -1,0 +1,17 @@
+# GradientForestMultiSpecies
+# Gradient forest models of genomic turnover for one or more species
+# sharing a study area and a set of environmental layers.
+
+configfile: "config/config.yaml"
+
+
+include: "rules/common.smk"
+include: "rules/env.smk"
+include: "rules/genotypes.smk"
+include: "rules/gf.smk"
+include: "rules/plots.smk"
+
+
+rule all:
+    input:
+        all_outputs(),

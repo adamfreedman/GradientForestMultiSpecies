@@ -1,0 +1,13 @@
+executor: slurm
+use-conda: true
+jobs: 100
+latency-wait: 60
+retries: 1
+printshellcmds: true
+rerun-incomplete: true
+
+default-resources:
+  slurm_account: "informatics"
+  slurm_partition: "sapphire"
+  runtime: "2h"   # use explicit units; a bare number in a profile is read as seconds
+  mem_mb: 8000
