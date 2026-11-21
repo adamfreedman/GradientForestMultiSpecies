@@ -67,3 +67,15 @@ gf:
   seed: 1
   pca_vars: all           # "all" or an integer: use the top-N most important predictors for the PCA / RGB map
   biplot_max_points: 50000
+  # Refit using only the predictors whose importance beats the randomized fits.
+  # The full model above is still fitted and remains the primary test; the refit
+  # (with its own ntree tuning and n_random randomizations) is written to
+  # results/<species>/<subdir>/. Its p-values are conditional on predictors chosen
+  # from the same data, so they are optimistic; use it for maps, turnover space and
+  # SNP-level R^2 without the noise predictors.
+  refit_significant:
+    enabled: true
+    alpha: 0.05                       # keep a predictor if empirical p <= alpha ...
+    metrics: [importance, accuracy]   # ... for any of these (R^2-weighted importance, accuracy importance)
+    min_predictors: 2                 # stop with an error if fewer predictors pass
+    subdir: refit_sigvars

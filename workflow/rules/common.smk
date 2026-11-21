@@ -43,8 +43,18 @@ def batch_reps(wc):
     return (b - 1) * RANDOM_BATCH + 1, min(b * RANDOM_BATCH, N_RANDOM)
 
 
+_REFIT = config["gf"].get("refit_significant") or {}
+REFIT_ON = bool(_REFIT.get("enabled", False))
+REFIT_DIR = str(_REFIT.get("subdir", "refit_sigvars"))
+if not re.fullmatch(r"[A-Za-z0-9_.-]+", REFIT_DIR):
+    raise ValueError(f"gf.refit_significant.subdir must be a plain directory name, got {REFIT_DIR!r}")
+
+_SP_RE = "|".join(re.escape(s) for s in SPECIES)
+
 wildcard_constraints:
-    species="|".join(re.escape(s) for s in SPECIES),
+    species=_SP_RE,
+    # a fitted model: "<species>" (all predictors) or "<species>/<REFIT_DIR>" (significant predictors)
+    model=f"({_SP_RE})(/{re.escape(REFIT_DIR)})?",
     batch=r"\d+",
 
 
@@ -56,6 +66,38 @@ def sp_dir(sub=""):
     return f"{OUT}/{{species}}/{sub}".rstrip("/")
 
 
+def m_dir(sub=""):
+    """path inside a model directory (wildcard {model})"""
+    return f"{OUT}/{{model}}/{sub}".rstrip("/")
+
+
+def model_species(wc):
+    return wc.model.split("/")[0]
+
+
+def is_refit(wc):
+    return "/" in wc.model
+
+
+def sp_file(sub):
+    """input function: species-level file for a model"""
+    return lambda wc: f"{OUT}/{model_species(wc)}/{sub}"
+
+
+def model_predictors(wc):
+    sp = model_species(wc)
+    return f"{OUT}/{sp}/{REFIT_DIR}/predictors.txt" if is_refit(wc) else f"{OUT}/{sp}/predictors/selected.txt"
+
+
+def model_label(wc):
+    sp = model_species(wc)
+    return f"{sp} (significant predictors only)" if is_refit(wc) else sp
+
+
+def models():
+    return SPECIES + ([f"{sp}/{REFIT_DIR}" for sp in SPECIES] if REFIT_ON else [])
+
+
 def all_outputs():
     plots = [
         "map_turnover_rgb",
@@ -64,14 +106,13 @@ def all_outputs():
         "importance_accuracy",
         "random_vs_real",
     ]
-    out = []
-    for sp in SPECIES:
+    out = [f"{OUT}/{sp}/predictors/correlation.png" for sp in SPECIES]
+    for m in models():
         for p in plots:
-            out += [f"{OUT}/{sp}/plots/{p}.pdf", f"{OUT}/{sp}/plots/{p}.png"]
+            out += [f"{OUT}/{m}/plots/{p}.pdf", f"{OUT}/{m}/plots/{p}.png"]
         out += [
-            f"{OUT}/{sp}/plots/gf_diagnostics.pdf",
-            f"{OUT}/{sp}/qc.html",
-            f"{OUT}/{sp}/gf/random_pvalues.tsv",
-            f"{OUT}/{sp}/predictors/correlation.png",
+            f"{OUT}/{m}/plots/gf_diagnostics.pdf",
+            f"{OUT}/{m}/qc.html",
+            f"{OUT}/{m}/gf/random_pvalues.tsv",
         ]
     return out

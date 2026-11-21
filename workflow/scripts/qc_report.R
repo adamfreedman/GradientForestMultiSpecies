@@ -7,9 +7,17 @@ suppressPackageStartupMessages(library(ggplot2))
 
 opt <- parse_args()
 need(opt, c("species", "spdir", "validation", "snp_filter", "pop_counts", "env_sites",
-            "predictors", "tuning", "ntree", "summary", "pvals", "out", "out_tuning_png"))
+            "predictors", "heatmap", "tuning", "ntree", "summary", "pvals", "out", "out_tuning_png"))
 sp <- opt$species
-rel <- function(path) sub(paste0("^", normalizePath(opt$spdir), "/?"), "", normalizePath(path))
+# path relative to the report's directory (files may live in a parent directory)
+rel <- function(path) {
+  from <- strsplit(normalizePath(opt$spdir), "/", fixed = TRUE)[[1]]
+  to <- strsplit(normalizePath(path), "/", fixed = TRUE)[[1]]
+  n <- 0
+  while (n < min(length(from), length(to)) && from[n + 1] == to[n + 1]) n <- n + 1
+  paste(c(rep("..", length(from) - n), to[-seq_len(n)]), collapse = "/")
+}
+is_refit <- !is.null(opt$refit) && opt$refit == "1"
 
 esc <- function(x) {
   x <- gsub("&", "&amp;", x, fixed = TRUE)
@@ -109,12 +117,19 @@ th{background:#f3f3f3} pre{background:#f7f7f7;padding:8px;font-size:12px;overflo
 </style></head><body>
 <h1>', esc(sp), ': gradient forest QC</h1><p>generated ', format(Sys.time(), "%Y-%m-%d %H:%M"), '</p>',
 warn_html,
+if (is_refit) paste0('<div class="warn"><b>Refit on significant predictors.</b> These predictors were chosen ',
+  'because their importance beat the randomized fits of the full model (', esc(paste(fread(opt$predictors)[kept == TRUE, variable], collapse = ", ")),
+  '). The randomization p-values below are conditional on that choice, which used the same data, so they ',
+  'are optimistic; the full model (<a href="../qc.html">../qc.html</a>) is the primary test. Use this refit for ',
+  'maps, turnover space and per-SNP R&sup2; without the non-significant predictors.</div>'),
 section("Model summary", html_table(summ)),
 section("Number of trees", ntree_txt, html_table(tun), if (!is.null(tun_png)) img(tun_png)),
 section("Observed vs. randomized fits", html_table(pv), img(file.path(plots, "random_vs_real.png")),
         img(file.path(plots, "importance_r2weighted.png"), "49%"), img(file.path(plots, "importance_accuracy.png"), "49%")),
 section("Turnover", img(file.path(plots, "map_turnover_rgb.png"), "49%"), img(file.path(plots, "biplot_turnover_pca.png"), "49%")),
-section("Predictors", html_table(preds), img(file.path(opt$spdir, "predictors", "correlation.png"), "60%")),
+section(if (is_refit) "Predictors (selected from the full model)" else "Predictors",
+        if (is_refit) "<p>Kept = empirical p &le; alpha for at least one importance metric in the full model. The correlation heat map is from the full predictor set.</p>",
+        html_table(preds), img(opt$heatmap, "60%")),
 section("SNP filtering", html_table(snpf)),
 section("Populations", html_table(merge(sites[, .(popid, sitename, lat, long, snapped_km)], pops, by = "popid", all.x = TRUE)[order(as.numeric(popid))])),
 section("Input validation", pre(val)),
