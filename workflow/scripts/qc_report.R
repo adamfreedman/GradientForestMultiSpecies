@@ -77,7 +77,8 @@ if (identical(nsel$mode[1], "auto") && nrow(tun) > 1) {
     labs(x = "ntree (each point compares this fit with the previous, smaller one)", y = NULL,
          title = sprintf("%s: ntree selection (chosen: %d%s)", sp, nsel$ntree[1],
                          if (isTRUE(as.logical(nsel$converged[1]))) "" else ", NOT converged")) +
-    theme_classic(base_size = 10)
+    theme_bw(base_size = 10) +
+    theme(panel.grid = element_blank(), panel.border = element_rect(colour = "black", fill = NA))
   ggsave(opt$out_tuning_png, p, width = 11, height = 3.4, dpi = 150)
   tun_png <- opt$out_tuning_png
 } else {

@@ -20,7 +20,8 @@ save_plot <- function(p, name, w, h) {
   ggsave(file.path(opt$outdir, paste0(name, ".pdf")), p, width = w, height = h)
   ggsave(file.path(opt$outdir, paste0(name, ".png")), p, width = w, height = h, dpi = 300)
 }
-theme_set(theme_classic(base_size = 11))  # no gridlines
+theme_set(theme_bw(base_size = 11) +  # black panel border, no gridlines
+            theme(panel.grid = element_blank(), panel.border = element_rect(colour = "black", fill = NA)))
 
 gf <- readRDS(opt$model)
 summ <- fread(opt$summary)
