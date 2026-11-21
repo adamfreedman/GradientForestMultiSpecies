@@ -84,7 +84,7 @@ p_bi <- ggplot() +
   coord_equal() +
   labs(x = sprintf("PC1 (%.1f%%)", ve[1]), y = sprintf("PC2 (%.1f%%)", ve[2]),
        title = sprintf("%s: turnover space", sp),
-       subtitle = "grid cells coloured as in the map; arrows = predictor loadings; circles = sampled populations")
+       subtitle = "grid cells coloured as in the map; arrows = predictor loadings;\ncircles = sampled populations")
 save_plot(p_bi, "biplot_turnover_pca", 8, 7)
 
 # ---- 3. variable importance vs. randomizations -----------------------------
