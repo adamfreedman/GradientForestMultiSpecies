@@ -1,6 +1,6 @@
 #!/usr/bin/env Rscript
-# Per-species QC report (self-contained HTML; figures are linked by relative
-# path, so keep qc.html inside the species results directory).
+# Per-species QC report: one self-contained HTML file (figures are embedded as
+# base64 PNG data, so qc.html can be copied or emailed on its own).
 this_dir <- dirname(sub("^--file=", "", grep("^--file=", commandArgs(FALSE), value = TRUE)))
 source(file.path(this_dir, "gf_common.R"))
 suppressPackageStartupMessages(library(ggplot2))
@@ -9,14 +9,6 @@ opt <- parse_args()
 need(opt, c("species", "spdir", "validation", "snp_filter", "pop_counts", "env_sites",
             "predictors", "heatmap", "tuning", "ntree", "summary", "pvals", "out", "out_tuning_png"))
 sp <- opt$species
-# path relative to the report's directory (files may live in a parent directory)
-rel <- function(path) {
-  from <- strsplit(normalizePath(opt$spdir), "/", fixed = TRUE)[[1]]
-  to <- strsplit(normalizePath(path), "/", fixed = TRUE)[[1]]
-  n <- 0
-  while (n < min(length(from), length(to)) && from[n + 1] == to[n + 1]) n <- n + 1
-  paste(c(rep("..", length(from) - n), to[-seq_len(n)]), collapse = "/")
-}
 is_refit <- !is.null(opt$refit) && opt$refit == "1"
 
 esc <- function(x) {
@@ -32,7 +24,24 @@ html_table <- function(dt, digits = 4) {
                                                          collapse = ""), "</tr>"))
   paste0("<table>", head, paste(body, collapse = ""), "</table>")
 }
-img <- function(path, width = "100%") sprintf('<img src="%s" style="max-width:%s">', esc(rel(path)), width)
+# base64 encoding in base R (avoids adding a package to the conda env)
+b64 <- function(path) {
+  raw <- readBin(path, "raw", file.info(path)$size)
+  tab <- strsplit("ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/", "")[[1]]
+  n <- length(raw)
+  pad <- (3 - n %% 3) %% 3
+  v <- as.integer(c(raw, as.raw(rep(0L, pad))))
+  m <- matrix(v, nrow = 3)
+  w <- m[1, ] * 65536L + m[2, ] * 256L + m[3, ]
+  idx <- rbind(w %/% 262144L, (w %/% 4096L) %% 64L, (w %/% 64L) %% 64L, w %% 64L)
+  ch <- tab[as.vector(idx) + 1L]
+  if (pad) ch[(length(ch) - pad + 1):length(ch)] <- "="
+  paste(ch, collapse = "")
+}
+img <- function(path, width = "100%") {
+  if (!file.exists(path)) return(sprintf("<p class='bad'>missing figure: %s</p>", esc(basename(path))))
+  sprintf('<img src="data:image/png;base64,%s" alt="%s" style="max-width:%s">', b64(path), esc(basename(path)), width)
+}
 
 warnings <- character(0)
 

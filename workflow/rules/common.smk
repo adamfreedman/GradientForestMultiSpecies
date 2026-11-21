@@ -98,6 +98,11 @@ def models():
     return SPECIES + ([f"{sp}/{REFIT_DIR}" for sp in SPECIES] if REFIT_ON else [])
 
 
+def qc_html(model):
+    """QC report name: qc.html for a full model, qc_refit.html for a refit"""
+    return f"{OUT}/{model}/{'qc_refit' if '/' in model else 'qc'}.html"
+
+
 def all_outputs():
     plots = [
         "map_turnover_rgb",
@@ -112,7 +117,7 @@ def all_outputs():
             out += [f"{OUT}/{m}/plots/{p}.pdf", f"{OUT}/{m}/plots/{p}.png"]
         out += [
             f"{OUT}/{m}/plots/gf_diagnostics.pdf",
-            f"{OUT}/{m}/qc.html",
+            qc_html(m),
             f"{OUT}/{m}/gf/random_pvalues.tsv",
         ]
     return out

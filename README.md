@@ -39,7 +39,7 @@ parameters. Each option is commented in the file.
 | `gf_randomize` | R | `{sp}/gf/random/batch{n}.tsv`: `n_random` fits (default 1000) with environment rows permuted and the same GF settings, run `random_batch_size` per SLURM job. `batch{n}_snp_rsq.tsv.gz` keeps each replicate's per-SNP R² for later per-SNP p-values |
 | `gf_random_summary` | R | `{sp}/gf/random_null.tsv`, `random_pvalues.tsv` |
 | `gf_predict` | R | `{sp}/gf/turnover_stack.tif` (transformed predictors), `turnover_rgb.tif`, PCA objects |
-| `qc_report` | R | `{sp}/qc.html`: warnings (including ntree not converging), ntree selection, model and randomization summaries, figures, predictor and SNP filtering, populations |
+| `qc_report` | R | `{sp}/qc.html` (`{sp}/refit_sigvars/qc_refit.html` for the refit), one self-contained file with figures embedded: warnings (including ntree not converging), ntree selection, model and randomization summaries, figures, predictor and SNP filtering, populations |
 | `plot_gf` | R | `{sp}/plots/`: turnover map, PCA biplot, R²-weighted and accuracy importance charts, observed-vs-random histograms, GF diagnostics |
 
 ### Converting the study-area shapefile without a GIS GUI
