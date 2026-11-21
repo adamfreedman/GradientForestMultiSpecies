@@ -2,12 +2,16 @@
 # GradientForestMultiSpecies configuration
 # ---------------------------------------------------------------------------
 
-# Tab-separated sample sheet, one row per species. Columns:
+# Tab-separated sample sheet, one row per species. Each species has its own
+# popmap and latlongs files, named with a species prefix (e.g.
+# taffinis_id_to_pop.txt, taffinis_pop_latlongs.csv); to add a species, add
+# its files and one row here. Columns:
 #   species   short name, no spaces (used in output paths)
 #   vcf       genotype VCF (plain or bgzipped)
 #   popmap    whitespace-delimited table with header: sampleid popid
 #   latlongs  CSV with header: popid,sitename,lat,long
-#   id_regex  optional; regex removed from VCF sample IDs before matching popmap
+#   id_regex  optional column; regex removed from VCF sample IDs before matching popmap
+#             (e.g. ^MCZA_). Leave the column out if the IDs already match.
 samples: config/samples.tsv
 
 outdir: results

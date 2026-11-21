@@ -9,7 +9,11 @@ cross-species congruence analyses.
 
 ## Inputs
 
-`config/samples.tsv` (tab-separated, one row per species):
+`config/samples.tsv` (tab-separated, one row per species). Each species has
+its own popmap and latlongs files, named with a species prefix, e.g.
+`taffinis_id_to_pop.txt` and `taffinis_pop_latlongs.csv`. To add a species, add
+its files and one row to the sample sheet; no shared file is edited. The
+workflow stops if two species point at the same popmap or latlongs file (a shared multi-species VCF is fine).
 
 | column | content |
 |---|---|
@@ -17,7 +21,7 @@ cross-species congruence analyses.
 | `vcf` | genotype VCF (plain or bgzipped) |
 | `popmap` | whitespace-delimited, header `sampleid popid`: VCF sample → population |
 | `latlongs` | CSV, header `popid,sitename,lat,long` |
-| `id_regex` | optional regex deleted from VCF sample IDs before matching `popmap` |
+| `id_regex` | optional column: regex deleted from VCF sample IDs before matching `popmap` (e.g. `^MCZA_`); omit it when the IDs already match |
 
 `config/config.yaml` sets the environmental-layer directory, the study area
 (any vector file, or a bounding box), predictor pruning, SNP filters and GF
