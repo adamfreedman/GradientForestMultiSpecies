@@ -99,7 +99,7 @@ importance_key <- function(n) {
   # viewport sits on an inner gTree
   key <- gTree(
     vp = viewport(x = unit(1, "npc") - unit(3, "mm"), y = unit(3, "mm"),
-                  width = unit(92, "mm"), height = unit(31, "mm"), just = c("right", "bottom")),
+                  width = unit(92, "mm"), height = unit(34, "mm"), just = c("right", "bottom")),
     children = gList(
       rectGrob(gp = gpar(fill = "white", col = "grey50", alpha = 0.92)),
       textGrob(sprintf("Bar = observed importance vs. %d randomized fits", n),
@@ -117,9 +117,10 @@ importance_key <- function(n) {
                    gp = gpar(col = "red3", lwd = 2.5)),
       textGrob("95th percentile of the randomized fits", x = unit(10, "mm"), y = row_y(3),
                just = "left", gp = fs),
-      textGrob(sprintf("p = (1 + no. randomized >= observed) / (%d + 1);  min. possible p = %.2g",
-                       n, 1 / (n + 1)),
-               x = unit(3, "mm"), y = row_y(4.4), just = "left", gp = gpar(fontsize = 6.5, col = "grey30"))
+      textGrob(sprintf("p = (1 + no. randomized >= observed) / (%d + 1)", n),
+               x = unit(3, "mm"), y = row_y(4.3), just = "left", gp = gpar(fontsize = 6.5, col = "grey30")),
+      textGrob(sprintf("smallest possible p = %.2g", 1 / (n + 1)),
+               x = unit(3, "mm"), y = row_y(5.0), just = "left", gp = gpar(fontsize = 6.5, col = "grey30"))
     )
   )
   gTree(children = gList(key))
@@ -138,7 +139,7 @@ plot_importance <- function(col, prefix, xlab, title, file) {
     geom_vline(xintercept = 0, colour = "grey40", linewidth = 0.3) +
     scale_fill_manual(values = c("p <= 0.05" = "steelblue4", "p > 0.05" = "grey65"), drop = FALSE) +
     scale_x_continuous(expand = expansion(mult = c(0.02, 0.05))) +
-    scale_y_discrete(expand = expansion(add = c(3.4, 0.6))) +  # empty space below the bars for the key
+    scale_y_discrete(expand = expansion(add = c(3.8, 0.6))) +  # empty space below the bars for the key
     annotation_custom(importance_key(nrow(null))) +
     labs(x = xlab, y = NULL, title = sprintf("%s: %s", sp, title)) +
     theme(legend.position = "none")
