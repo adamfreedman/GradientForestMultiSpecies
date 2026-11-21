@@ -1,2 +1,2 @@
-species	vcf	popmap	latlongs	id_regex
-trachylepis	/n/holylfs05/LABS/informatics/Lab/projects/afreedman/pire/data/vcfs/oneperrad_trachylepis_RAD.vcf	/n/holylfs05/LABS/informatics/Lab/projects/afreedman/pire/data/samples/id_to_pop.txt	/n/holylfs05/LABS/informatics/Lab/projects/afreedman/pire/data/samples/pop_latlongs.csv	
+species	vcf	popmap	latlongs
+trachylepis	/n/holylfs05/LABS/informatics/Lab/projects/afreedman/pire/data/vcfs/oneperrad_trachylepis_RAD.vcf	/n/holylfs05/LABS/informatics/Lab/projects/afreedman/pire/data/samples/taffinis_id_to_pop.txt	/n/holylfs05/LABS/informatics/Lab/projects/afreedman/pire/data/samples/taffinis_pop_latlongs.csv

@@ -23,6 +23,16 @@ if bad:
     raise ValueError(f"species names may only contain letters, digits, '_', '.', '-': {bad}")
 if SAMPLES.index.duplicated().any():
     raise ValueError("duplicate species names in sample sheet")
+# each species has its own popmap and latlongs files, so adding a species never
+# means editing a file another species reads
+for col in ("popmap", "latlongs"):
+    paths = SAMPLES[col].map(os.path.abspath)
+    shared = paths[paths.duplicated(keep=False)]
+    if len(shared):
+        raise ValueError(
+            f"sample sheet: each species needs its own {col} file; shared by "
+            + "; ".join(f"{p}: {', '.join(shared.index[shared == p])}" for p in shared.unique())
+        )
 
 SPECIES = list(SAMPLES.index)
 N_RANDOM = int(config["gf"]["n_random"])
