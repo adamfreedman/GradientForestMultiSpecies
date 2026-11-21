@@ -62,6 +62,8 @@ rule qc_report:
         ntree=m_dir("gf/ntree_selected.tsv"),
         summary=m_dir("gf/summary.tsv"),
         pvals=m_dir("gf/random_pvalues.tsv"),
+        snp_pvals=m_dir("gf/snp_pvalues.tsv"),
+        unmapped=sp_file("qc/unmapped_samples.tsv"),
     output:
         html=m_dir("qc.html"),
         tuning_png=m_dir("plots/ntree_tuning.png"),
@@ -85,7 +87,7 @@ rule qc_report:
         "--validation={input.validation} --snp_filter={input.snp_filter} --pop_counts={input.pop_counts} "
         "--env_sites={input.sites} --predictors={input.predictors} --tuning={input.tuning} "
         "--ntree={input.ntree} --summary={input.summary} --pvals={input.pvals} {params.thr} "
-        "--heatmap={input.heatmap} {params.refit} "
+        "--heatmap={input.heatmap} --snp_pvals={input.snp_pvals} --unmapped={input.unmapped} {params.refit} "
         "--out={output.html} --out_tuning_png={output.tuning_png} > {log} 2>&1"
 
 

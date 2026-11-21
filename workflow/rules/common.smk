@@ -129,5 +129,6 @@ def all_outputs():
             f"{OUT}/{m}/plots/gf_diagnostics.pdf",
             qc_html(m),
             f"{OUT}/{m}/gf/random_pvalues.tsv",
+            f"{OUT}/{m}/gf/snp_pvalues.tsv",
         ]
     return out

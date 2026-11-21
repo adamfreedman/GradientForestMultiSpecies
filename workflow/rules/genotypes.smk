@@ -10,9 +10,9 @@ rule validate_inputs:
     output:
         report=sp_dir("qc/validation.txt"),
         sample_pop=sp_dir("qc/sample_pop.tsv"),
+        unmapped=sp_dir("qc/unmapped_samples.tsv"),
     params:
         regex=lambda wc: SAMPLES.loc[wc.species, "id_regex"],
-        allow="--allow-unmapped" if config["genotypes"].get("allow_unmapped_samples") else "",
         snap=config["env"].get("max_snap_km", 0),
     log:
         f"{OUT}/logs/{{species}}/validate_inputs.log",
@@ -21,8 +21,8 @@ rule validate_inputs:
     shell:
         "python {SCRIPTS}/validate_inputs.py --vcf {input.vcf} --popmap {input.popmap} "
         "--latlongs {input.latlongs} --env-tif {input.tif} --id-regex '{params.regex}' "
-        "--max-snap-km {params.snap} {params.allow} "
-        "--out-report {output.report} --out-sample-pop {output.sample_pop} > {log} 2>&1"
+        "--max-snap-km {params.snap} --out-report {output.report} "
+        "--out-sample-pop {output.sample_pop} --out-unmapped {output.unmapped} > {log} 2>&1"
 
 
 rule vcf_to_popfreq:

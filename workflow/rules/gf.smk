@@ -118,6 +118,29 @@ rule gf_random_summary:
         "{input.reps} > {log} 2>&1"
 
 
+rule gf_snp_pvalues:
+    """per-SNP empirical p-values from the randomized fits, plus Benjamini-Hochberg FDR"""
+    input:
+        rsq=m_dir("gf/snp_rsq.tsv"),
+        freq=sp_file("genotypes/popfreq.tsv"),
+        null=m_dir("gf/random_null.tsv"),
+        snp_rsq=expand(
+            m_dir("gf/random/batch{batch}_snp_rsq.tsv.gz"), batch=range(1, N_BATCHES + 1), allow_missing=True
+        ),
+    output:
+        m_dir("gf/snp_pvalues.tsv"),
+    resources:
+        mem_mb=16000,
+        runtime=60,
+    log:
+        f"{OUT}/logs/{{model}}/gf_snp_pvalues.log",
+    conda:
+        "../envs/r_gf.yaml"
+    shell:
+        "Rscript {SCRIPTS}/gf_snp_pvalues.R --rsq={input.rsq} --popfreq={input.freq} "
+        "--null={input.null} --out={output} {input.snp_rsq} > {log} 2>&1"
+
+
 rule gf_predict:
     input:
         gf_ok=rules.install_gf.output,
