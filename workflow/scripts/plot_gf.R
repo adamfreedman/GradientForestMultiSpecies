@@ -72,15 +72,22 @@ load <- as.data.table(pinfo$pca$rotation[, 1:2, drop = FALSE], keep.rownames = "
 scal <- 0.9 * max(abs(c(gsub_$PC1, gsub_$PC2))) / max(sqrt(load$PC1^2 + load$PC2^2))
 load[, `:=`(xe = PC1 * scal, ye = PC2 * scal)]
 ve <- 100 * pinfo$var_explained
+# predictor and population labels in one repel layer so they avoid each other
+# (and the population circles); predictor labels start just past the arrow tip
+labs_bi <- rbind(
+  data.table(x = load$xe * 1.08, y = load$ye * 1.08, label = load$variable, size = 3.2,
+             face = "bold", col = "black", is_site = FALSE),
+  data.table(x = sites$PC1, y = sites$PC2, label = sites$sitename, size = 2.8,
+             face = "plain", col = "grey20", is_site = TRUE))
 p_bi <- ggplot() +
   geom_point(data = gsub_, aes(PC1, PC2), colour = gsub_$col, size = 0.4, alpha = 0.6, shape = 16) +
   geom_segment(data = load, aes(0, 0, xend = xe, yend = ye),
                arrow = arrow(length = unit(0.18, "cm")), linewidth = 0.5) +
-  geom_text_repel(data = load, aes(xe * 1.08, ye * 1.08, label = variable), size = 3.2,
-                  fontface = "bold", min.segment.length = Inf, seed = 1) +
   geom_point(data = sites, aes(PC1, PC2), shape = 21, fill = sites$col, colour = "black", size = 2.6) +
-  geom_text_repel(data = sites, aes(PC1, PC2, label = sitename), size = 2.8, colour = "grey20",
-                  bg.colour = "white", bg.r = 0.15, seed = 2) +
+  geom_text_repel(data = labs_bi, aes(x, y, label = label), size = labs_bi$size,
+                  fontface = labs_bi$face, colour = labs_bi$col, bg.colour = "white", bg.r = 0.15,
+                  point.size = ifelse(labs_bi$is_site, 2.6, 0), box.padding = 0.35,
+                  min.segment.length = 0.2, segment.colour = "grey40", max.overlaps = Inf, seed = 1) +
   coord_equal() +
   labs(x = sprintf("PC1 (%.1f%%)", ve[1]), y = sprintf("PC2 (%.1f%%)", ve[2]),
        title = sprintf("%s: turnover space", sp),
@@ -90,7 +97,7 @@ save_plot(p_bi, "biplot_turnover_pca", 8, 7)
 # ---- 3. variable importance vs. randomizations -----------------------------
 # Bar = observed importance. Bars are coloured by the empirical p-value of the
 # observed value against the randomized (environment-permuted) fits; the red
-# tick marks the 95th percentile of the randomized values. The smallest
+# line under each bar spans the 5th-95th percentile of the randomized values (dot = mean). The smallest
 # attainable p is 1 / (n_random + 1).
 # colour key drawn inside the panel (bottom right, where the smallest bars are)
 importance_key <- function(n) {
