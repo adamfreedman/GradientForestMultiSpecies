@@ -12,6 +12,8 @@
 #   latlongs  CSV with header: popid,sitename,lat,long
 #   id_regex  optional column; regex removed from VCF sample IDs before matching popmap
 #             (e.g. ^MCZA_). Leave the column out if the IDs already match.
+#   min_ind_per_pop  optional column; minimum individuals for a population to be kept
+#             for this species (overrides genotypes.min_ind_per_pop; blank = default)
 samples: config/samples.tsv
 
 outdir: results
@@ -44,7 +46,8 @@ predictors:
   keep_priority: []       # variables never dropped by pruning if avoidable
 
 genotypes:
-  min_ind_per_pop: 5          # populations with fewer genotyped individuals are dropped
+  min_ind_per_pop: 5          # populations with fewer genotyped individuals are dropped;
+                              # default for species with no min_ind_per_pop in the sample sheet
   max_missing_per_pop: 0.5    # drop SNP if the missing-genotype fraction exceeds this in any population
   min_maf: 0.05               # global minor allele frequency
 

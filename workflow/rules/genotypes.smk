@@ -36,7 +36,7 @@ rule vcf_to_popfreq:
         pops=sp_dir("genotypes/pop_counts.tsv"),
         snp_info=sp_dir("genotypes/snp_info.tsv"),
     params:
-        min_ind=config["genotypes"]["min_ind_per_pop"],
+        min_ind=min_ind_per_pop,
         max_miss=config["genotypes"]["max_missing_per_pop"],
         maf=config["genotypes"]["min_maf"],
     resources:

@@ -22,6 +22,7 @@ workflow stops if two species point at the same popmap or latlongs file (a share
 | `popmap` | whitespace-delimited, header `sampleid popid`: VCF sample → population |
 | `latlongs` | CSV, header `popid,sitename,lat,long` |
 | `id_regex` | optional column: regex deleted from VCF sample IDs before matching `popmap` (e.g. `^MCZA_`); omit it when the IDs already match |
+| `min_ind_per_pop` | optional column: minimum individuals for a population to be kept for this species; blank or absent = `genotypes.min_ind_per_pop` in `config.yaml` |
 
 `config/config.yaml` sets the environmental-layer directory, the study area
 (any vector file, or a bounding box), predictor pruning, SNP filters and GF

@@ -16,8 +16,12 @@ SAMPLES = (
 for col in ("species", "vcf", "popmap", "latlongs"):
     if col not in SAMPLES.columns:
         raise ValueError(f"sample sheet {config['samples']} is missing column '{col}'")
-if "id_regex" not in SAMPLES.columns:
-    SAMPLES["id_regex"] = ""
+for col in ("id_regex", "min_ind_per_pop"):  # optional columns
+    if col not in SAMPLES.columns:
+        SAMPLES[col] = ""
+bad_n = [s for s, v in SAMPLES.min_ind_per_pop.items() if v and not (v.isdigit() and int(v) >= 1)]
+if bad_n:
+    raise ValueError(f"sample sheet: min_ind_per_pop must be a positive integer (species {bad_n})")
 bad = [s for s in SAMPLES.index if not re.fullmatch(r"[A-Za-z0-9_.-]+", s)]
 if bad:
     raise ValueError(f"species names may only contain letters, digits, '_', '.', '-': {bad}")
@@ -66,6 +70,12 @@ wildcard_constraints:
     # a fitted model: "<species>" (all predictors) or "<species>/<REFIT_DIR>" (significant predictors)
     model=f"({_SP_RE})(/{re.escape(REFIT_DIR)})?",
     batch=r"\d+",
+
+
+def min_ind_per_pop(wc):
+    """per-species value from the sample sheet, else genotypes.min_ind_per_pop"""
+    v = SAMPLES.loc[wc.species, "min_ind_per_pop"]
+    return int(v) if v else int(config["genotypes"]["min_ind_per_pop"])
 
 
 def sample_col(col):
