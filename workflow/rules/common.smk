@@ -1,0 +1,118 @@
+import math
+import os
+import re
+
+import pandas as pd
+
+SCRIPTS = os.path.join(workflow.basedir, "scripts")
+OUT = config.get("outdir", "results")
+ENV_DIR = f"{OUT}/env"
+
+SAMPLES = (
+    pd.read_csv(config["samples"], sep="\t", dtype=str, comment="#")
+    .fillna("")
+    .set_index("species", drop=False)
+)
+for col in ("species", "vcf", "popmap", "latlongs"):
+    if col not in SAMPLES.columns:
+        raise ValueError(f"sample sheet {config['samples']} is missing column '{col}'")
+if "id_regex" not in SAMPLES.columns:
+    SAMPLES["id_regex"] = ""
+bad = [s for s in SAMPLES.index if not re.fullmatch(r"[A-Za-z0-9_.-]+", s)]
+if bad:
+    raise ValueError(f"species names may only contain letters, digits, '_', '.', '-': {bad}")
+if SAMPLES.index.duplicated().any():
+    raise ValueError("duplicate species names in sample sheet")
+
+SPECIES = list(SAMPLES.index)
+N_RANDOM = int(config["gf"]["n_random"])
+RANDOM_BATCH = max(1, int(config["gf"].get("random_batch_size", 10)))
+N_BATCHES = -(-N_RANDOM // RANDOM_BATCH)  # ceiling
+
+
+def random_runtime(wc, input):
+    """SLURM minutes for one randomization batch: ~3 min per 100 trees per fit
+    (about 14k SNPs, 14 sites) doubled for margin, times the batch size."""
+    ntree = int(pd.read_csv(input.ntree, sep="\t")["ntree"].iloc[0])
+    return 30 + RANDOM_BATCH * math.ceil(6 * ntree / 100)
+
+
+def batch_reps(wc):
+    """first and last replicate number in a randomization batch"""
+    b = int(wc.batch)
+    return (b - 1) * RANDOM_BATCH + 1, min(b * RANDOM_BATCH, N_RANDOM)
+
+
+_REFIT = config["gf"].get("refit_significant") or {}
+REFIT_ON = bool(_REFIT.get("enabled", False))
+REFIT_DIR = str(_REFIT.get("subdir", "refit_sigvars"))
+if not re.fullmatch(r"[A-Za-z0-9_.-]+", REFIT_DIR):
+    raise ValueError(f"gf.refit_significant.subdir must be a plain directory name, got {REFIT_DIR!r}")
+
+_SP_RE = "|".join(re.escape(s) for s in SPECIES)
+
+wildcard_constraints:
+    species=_SP_RE,
+    # a fitted model: "<species>" (all predictors) or "<species>/<REFIT_DIR>" (significant predictors)
+    model=f"({_SP_RE})(/{re.escape(REFIT_DIR)})?",
+    batch=r"\d+",
+
+
+def sample_col(col):
+    return lambda wc: SAMPLES.loc[wc.species, col]
+
+
+def sp_dir(sub=""):
+    return f"{OUT}/{{species}}/{sub}".rstrip("/")
+
+
+def m_dir(sub=""):
+    """path inside a model directory (wildcard {model})"""
+    return f"{OUT}/{{model}}/{sub}".rstrip("/")
+
+
+def model_species(wc):
+    return wc.model.split("/")[0]
+
+
+def is_refit(wc):
+    return "/" in wc.model
+
+
+def sp_file(sub):
+    """input function: species-level file for a model"""
+    return lambda wc: f"{OUT}/{model_species(wc)}/{sub}"
+
+
+def model_predictors(wc):
+    sp = model_species(wc)
+    return f"{OUT}/{sp}/{REFIT_DIR}/predictors.txt" if is_refit(wc) else f"{OUT}/{sp}/predictors/selected.txt"
+
+
+def model_label(wc):
+    sp = model_species(wc)
+    return f"{sp} (significant predictors only)" if is_refit(wc) else sp
+
+
+def models():
+    return SPECIES + ([f"{sp}/{REFIT_DIR}" for sp in SPECIES] if REFIT_ON else [])
+
+
+def all_outputs():
+    plots = [
+        "map_turnover_rgb",
+        "biplot_turnover_pca",
+        "importance_r2weighted",
+        "importance_accuracy",
+        "random_vs_real",
+    ]
+    out = [f"{OUT}/{sp}/predictors/correlation.png" for sp in SPECIES]
+    for m in models():
+        for p in plots:
+            out += [f"{OUT}/{m}/plots/{p}.pdf", f"{OUT}/{m}/plots/{p}.png"]
+        out += [
+            f"{OUT}/{m}/plots/gf_diagnostics.pdf",
+            f"{OUT}/{m}/qc.html",
+            f"{OUT}/{m}/gf/random_pvalues.tsv",
+        ]
+    return out

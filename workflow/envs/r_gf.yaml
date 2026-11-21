@@ -1,0 +1,15 @@
+channels:
+  - conda-forge
+  - nodefaults
+dependencies:
+  - r-base=4.4
+  - r-data.table
+  - r-terra
+  - r-ggplot2
+  - r-ggrepel
+  - r-lattice
+  - r-remotes
+  # extendedForest / gradientForest are installed from R-Forge by rule install_gf
+  # and need a compiler toolchain
+  - compilers
+  - make

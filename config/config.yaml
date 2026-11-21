@@ -1,0 +1,81 @@
+# ---------------------------------------------------------------------------
+# GradientForestMultiSpecies configuration
+# ---------------------------------------------------------------------------
+
+# Tab-separated sample sheet, one row per species. Columns:
+#   species   short name, no spaces (used in output paths)
+#   vcf       genotype VCF (plain or bgzipped)
+#   popmap    whitespace-delimited table with header: sampleid popid
+#   latlongs  CSV with header: popid,sitename,lat,long
+#   id_regex  optional; regex removed from VCF sample IDs before matching popmap
+samples: config/samples.tsv
+
+outdir: results
+
+env:
+  # directory holding one raster per environmental variable
+  dir: /n/holylfs05/LABS/informatics/Lab/projects/afreedman/pire/data/worldclim
+  pattern: "*.asc"
+  # regex applied to each file name; group 1 is the variable number -> "bio<N>".
+  # Set name_template: "{0}" and use a regex whose group 1 is the full name for non-bioclim layers.
+  name_regex: "bio_?(\\d+)"
+  name_template: "bio{0}"
+  # study area: any vector file readable by GDAL/OGR (shp, gpkg, geojson) ...
+  clip: /n/holylfs05/LABS/informatics/Lab/projects/afreedman/pire/data/bounding_box/PIREbb.shp
+  # ... or a plain bounding box (used only if clip is empty): [xmin, ymin, xmax, ymax]
+  bbox: []
+  # country boundaries drawn on the turnover map: "naturalearth" (Natural Earth 1:10m
+  # Admin 0, public domain, downloaded once), a path to any vector file, or "none"
+  boundaries: naturalearth
+  # aggregate the prediction grid by this factor (1 = native 30 arc-sec)
+  grid_aggregate: 1
+  # 0 = value of the cell containing the site; > 0 = mean of cells within this radius
+  site_buffer_km: 0
+  # if a site falls on a NA cell (e.g. coastline), use the nearest valid cell within this distance
+  max_snap_km: 5
+
+predictors:
+  include: all            # "all" or a list such as [bio1, bio2, bio12]
+  corr_threshold: 0.8     # prune pairs with |Pearson r| above this at the sites; null = no pruning
+  keep_priority: []       # variables never dropped by pruning if avoidable
+
+genotypes:
+  min_ind_per_pop: 5          # populations with fewer genotyped individuals are dropped
+  max_missing_per_pop: 0.5    # drop SNP if the missing-genotype fraction exceeds this in any population
+  min_maf: 0.05               # global minor allele frequency
+  allow_unmapped_samples: false   # true = silently drop VCF samples absent from popmap
+
+gf:
+  # number of trees per forest, used for the observed fit and every randomized fit.
+  # "auto": start at ntree_tuning.start and multiply by ntree_tuning.factor until two
+  # successive fits agree (all three criteria below) or ntree_tuning.max is reached
+  # (then a warning goes to the gf_fit log and qc.html). An integer fixes ntree.
+  ntree: auto
+  ntree_tuning:
+    start: 250
+    factor: 2
+    max: 4000
+    min_snp_rsq_cor: 0.98        # Pearson r of per-SNP R^2 between successive fits
+    max_importance_change: 0.05  # max |change| in any predictor's R^2-weighted importance / total importance
+    min_turnover_cor: 0.99       # Pearson r of pairwise turnover distances among n_cells random grid cells
+    n_cells: 1500
+  maxLevel: auto          # "auto" = floor(log2(0.368 * nSites / 2)), min 1
+  corr_threshold: 0.5
+  nbin: 201
+  n_random: 1000          # number of randomized (permuted-environment) fits used as the null
+  random_batch_size: 10   # randomized fits run sequentially within one SLURM job
+  seed: 1
+  pca_vars: all           # "all" or an integer: use the top-N most important predictors for the PCA / RGB map
+  biplot_max_points: 50000
+  # Refit using only the predictors whose importance beats the randomized fits.
+  # The full model above is still fitted and remains the primary test; the refit
+  # (with its own ntree tuning and n_random randomizations) is written to
+  # results/<species>/<subdir>/. Its p-values are conditional on predictors chosen
+  # from the same data, so they are optimistic; use it for maps, turnover space and
+  # SNP-level R^2 without the noise predictors.
+  refit_significant:
+    enabled: true
+    alpha: 0.05                       # keep a predictor if empirical p <= alpha ...
+    metrics: [importance, accuracy]   # ... for any of these (R^2-weighted importance, accuracy importance)
+    min_predictors: 2                 # stop with an error if fewer predictors pass
+    subdir: refit_sigvars
