@@ -65,6 +65,8 @@ rule qc_report:
     output:
         html=m_dir("qc.html"),
         tuning_png=m_dir("plots/ntree_tuning.png"),
+    wildcard_constraints:
+        model=_SP_RE,
     params:
         spdir=m_dir(),
         label=model_label,
@@ -85,3 +87,12 @@ rule qc_report:
         "--ntree={input.ntree} --summary={input.summary} --pvals={input.pvals} {params.thr} "
         "--heatmap={input.heatmap} {params.refit} "
         "--out={output.html} --out_tuning_png={output.tuning_png} > {log} 2>&1"
+
+
+# refit on significant predictors: same report, named qc_refit.html
+use rule qc_report as qc_report_refit with:
+    output:
+        html=f"{OUT}/{{model}}/qc_refit.html",
+        tuning_png=m_dir("plots/ntree_tuning.png"),
+    wildcard_constraints:
+        model=f"({_SP_RE})/{re.escape(REFIT_DIR)}",
