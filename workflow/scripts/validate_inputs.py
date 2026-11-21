@@ -1,12 +1,20 @@
 #!/usr/bin/env python
 """Cross-check a species' VCF, population map and population coordinates.
 
-Fails (exit 1, no outputs) on: VCF samples missing from the popmap (unless
---allow-unmapped), duplicated IDs, popids without coordinates, populations
-outside the environmental grid or on NA cells farther than --max-snap-km from
-valid data. Writes a report and a clean vcf_id -> popid table.
+Individuals that do not map to a population with coordinates are excluded
+with a warning and listed in --out-unmapped:
+  * in the VCF but not in the popmap
+  * in the popmap but not in the VCF
+  * in both, but their popid has no row in latlongs (e.g. a population left
+    out because it has too few individuals)
+
+Fails (exit 1, errors on stderr, no outputs) on: a latlongs population with no
+individuals in the VCF, duplicated IDs, populations outside the environmental
+grid or on NA cells farther than --max-snap-km from valid data.
+Writes a report, the vcf_id -> popid table and the unmapped-individuals table.
 """
 import argparse
+import os
 import sys
 
 import numpy as np
@@ -23,9 +31,9 @@ def main():
     p.add_argument("--env-tif", required=True)
     p.add_argument("--id-regex", default="")
     p.add_argument("--max-snap-km", type=float, default=0)
-    p.add_argument("--allow-unmapped", action="store_true")
     p.add_argument("--out-report", required=True)
     p.add_argument("--out-sample-pop", required=True)
+    p.add_argument("--out-unmapped", required=True)
     a = p.parse_args()
 
     errors, warns, info = [], [], []
@@ -43,25 +51,54 @@ def main():
         errors.append(f"duplicate sampleids in popmap: {sorted(pm.sampleid[pm.sampleid.duplicated()].unique())}")
     pm_d = dict(zip(pm.sampleid, pm.popid))
 
-    unmapped = [v for v, n in zip(vcf_ids, norm) if n not in pm_d]
-    if unmapped:
-        msg = f"{len(unmapped)} VCF samples not in popmap: {unmapped}"
-        (warns if a.allow_unmapped else errors).append(msg)
-    absent = sorted(set(pm.sampleid) - set(norm))
-    if absent:
-        warns.append(f"{len(absent)} popmap samples not in VCF (ignored): {absent}")
-
     ll = read_latlongs(a.latlongs)
+    info.append(f"latlongs populations: {len(ll)}")
     if ll.popid.duplicated().any():
         errors.append(f"duplicate popids in latlongs: {sorted(ll.popid[ll.popid.duplicated()])}")
-    mapped = [(v, pm_d[n]) for v, n in zip(vcf_ids, norm) if n in pm_d]
+    ll_pops = set(ll.popid)
+    vcf_set = set(norm)
+
+    # individuals that do not map to a population with coordinates
+    unmapped = []  # sample_id, popid, missing_in_vcf, missing_in_popmap, popid_in_latlongs, reason
+    for v, n in zip(vcf_ids, norm):
+        if n not in pm_d:
+            unmapped.append((v, "", "no", "yes", "", "in VCF, not in popmap"))
+        elif pm_d[n] not in ll_pops:
+            unmapped.append((v, pm_d[n], "no", "no", "no", "population has no coordinates in latlongs"))
+    for sid in pm.sampleid.drop_duplicates():
+        if sid not in vcf_set:
+            pop = pm_d[sid]
+            unmapped.append((sid, pop, "yes", "no", "yes" if pop in ll_pops else "no", "in popmap, not in VCF"))
+
+    def short(ids, k=10):
+        return ", ".join(ids[:k]) + (f", ... ({len(ids) - k} more)" if len(ids) > k else "")
+
+    by_reason = {}
+    for r in unmapped:
+        by_reason.setdefault(r[5], []).append(r)
+    if "in VCF, not in popmap" in by_reason:
+        ids = [r[0] for r in by_reason["in VCF, not in popmap"]]
+        warns.append(f"{len(ids)} VCF samples not in popmap (excluded): {short(ids)}")
+    if "population has no coordinates in latlongs" in by_reason:
+        rs = by_reason["population has no coordinates in latlongs"]
+        pops = sorted({r[1] for r in rs}, key=lambda x: (len(x), x))
+        counts = ", ".join(f"{pop} (n={sum(r[1] == pop for r in rs)})" for pop in pops)
+        warns.append(f"{len(rs)} VCF samples in popids with no coordinates in latlongs (excluded): {counts}")
+    if "in popmap, not in VCF" in by_reason:
+        ids = [r[0] for r in by_reason["in popmap, not in VCF"]]
+        warns.append(f"{len(ids)} popmap samples not in VCF (ignored): {short(ids)}")
+    if unmapped:
+        warns.append(f"{len(unmapped)} individuals in total do not map to a population; listed in "
+                     f"{os.path.basename(a.out_unmapped)}")
+
+    mapped = [(v, pm_d[n]) for v, n in zip(vcf_ids, norm) if n in pm_d and pm_d[n] in ll_pops]
+    info.append(f"VCF samples mapped to a population with coordinates: {len(mapped)}")
     pops_used = sorted({pop for _, pop in mapped}, key=lambda x: (len(x), x))
-    no_coord = [x for x in pops_used if x not in set(ll.popid)]
-    if no_coord:
-        errors.append(f"popids in popmap without coordinates in latlongs: {no_coord}")
-    unused = sorted(set(ll.popid) - set(pops_used))
-    if unused:
-        warns.append(f"latlongs populations with no VCF samples (ignored): {unused}")
+    empty = ll[~ll.popid.isin(pops_used)]
+    for _, row in empty.iterrows():
+        n_pm = int((pm.popid == row.popid).sum())
+        errors.append(f"latlongs population {row.popid} ({row.sitename}) has no individuals in the VCF "
+                      f"({n_pm} in popmap); remove it from latlongs or fix the popmap/VCF")
 
     env = EnvStack(a.env_tif)
     info.append(f"\npopulation  site  lat  long  n_ind  env_cell")
@@ -96,13 +133,19 @@ def main():
     report = "\n".join(lines) + "\n"
     print(report)
     if errors:
-        sys.exit("validation FAILED; see errors above")
+        for e in errors:
+            print(f"ERROR: {e}", file=sys.stderr)
+        sys.exit(f"validation FAILED with {len(errors)} error(s)")
     with open(a.out_report, "w") as fh:
         fh.write(report)
     with open(a.out_sample_pop, "w") as fh:
         fh.write("vcf_id\tpopid\n")
         for v, pop in mapped:
             fh.write(f"{v}\t{pop}\n")
+    with open(a.out_unmapped, "w") as fh:
+        fh.write("sample_id\tpopid\tmissing_in_vcf\tmissing_in_popmap\tpopid_in_latlongs\treason\n")
+        for r in unmapped:
+            fh.write("\t".join(r) + "\n")
 
 
 if __name__ == "__main__":

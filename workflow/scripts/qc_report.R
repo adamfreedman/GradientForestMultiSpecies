@@ -7,7 +7,8 @@ suppressPackageStartupMessages(library(ggplot2))
 
 opt <- parse_args()
 need(opt, c("species", "spdir", "validation", "snp_filter", "pop_counts", "env_sites",
-            "predictors", "heatmap", "tuning", "ntree", "summary", "pvals", "out", "out_tuning_png"))
+            "predictors", "heatmap", "tuning", "ntree", "summary", "pvals", "snp_pvals", "unmapped",
+            "out", "out_tuning_png"))
 sp <- opt$species
 is_refit <- !is.null(opt$refit) && opt$refit == "1"
 
@@ -59,6 +60,15 @@ dropped <- setdiff(sites$popid, pops$popid)
 if (length(dropped)) warnings <- c(warnings, sprintf("Populations dropped for too few individuals: %s",
                                                      paste(dropped, collapse = ", ")))
 snpf <- fread(opt$snp_filter)
+unm <- fread(opt$unmapped, colClasses = "character")
+snp_p <- fread(opt$snp_pvals)
+snp_n <- snp_p$n_random[1]
+snp_tab <- data.table(
+  measure = c("SNPs tested", "SNPs with observed R² > 0",
+              sprintf("p ≤ %s", c(0.01, 0.05)), sprintf("BH-adjusted p ≤ %s", c(0.01, 0.05, 0.1))),
+  n_snps = c(nrow(snp_p), sum(snp_p$rsq > 0),
+             sum(snp_p$p_empirical <= 0.01), sum(snp_p$p_empirical <= 0.05),
+             sum(snp_p$p_bh <= 0.01), sum(snp_p$p_bh <= 0.05), sum(snp_p$p_bh <= 0.1)))
 preds <- fread(opt$predictors)
 
 # ---- ntree selection ---------------------------------------------------------
@@ -141,7 +151,18 @@ section(if (is_refit) "Predictors (selected from the full model)" else "Predicto
         if (is_refit) "<p>Kept = empirical p &le; alpha for at least one importance metric in the full model. The correlation heat map is from the full predictor set.</p>",
         html_table(preds), img(opt$heatmap, "60%")),
 section("SNP filtering", html_table(snpf)),
+section("Per-SNP tests",
+        sprintf(paste0("<p>For each SNP, p = (1 + no. of the %d randomized fits with R&sup2; &ge; observed) / (%d + 1), ",
+                       "so the smallest possible p is %.2g. SNPs with observed R&sup2; = 0 get p = 1. ",
+                       "BH = Benjamini-Hochberg adjustment over all SNPs tested. Full table: <code>gf/snp_pvalues.tsv</code>.</p>"),
+                snp_n, snp_n, 1 / (snp_n + 1)),
+        html_table(snp_tab)),
 section("Populations", html_table(merge(sites[, .(popid, sitename, lat, long, snapped_km)], pops, by = "popid", all.x = TRUE)[order(as.numeric(popid))])),
+section("Individuals not mapped to a population",
+        if (nrow(unm)) paste0("<p>Excluded from the analysis. <i>missing_in_vcf</i> = in the popmap but not the VCF; ",
+                              "<i>missing_in_popmap</i> = in the VCF but not the popmap; <i>popid_in_latlongs</i> = ",
+                              "whether the individual's population has coordinates.</p>", html_table(unm))
+        else "<p>All individuals in the VCF and the popmap map to a population with coordinates.</p>"),
 section("Input validation", pre(val)),
 "</body></html>")
 writeLines(html, opt$out)

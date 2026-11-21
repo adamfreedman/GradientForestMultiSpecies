@@ -47,7 +47,6 @@ genotypes:
   min_ind_per_pop: 5          # populations with fewer genotyped individuals are dropped
   max_missing_per_pop: 0.5    # drop SNP if the missing-genotype fraction exceeds this in any population
   min_maf: 0.05               # global minor allele frequency
-  allow_unmapped_samples: false   # true = silently drop VCF samples absent from popmap
 
 gf:
   # number of trees per forest, used for the observed fit and every randomized fit.
