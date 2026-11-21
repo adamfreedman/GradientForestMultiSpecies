@@ -34,6 +34,7 @@ rule vcf_to_popfreq:
         freq=sp_dir("genotypes/popfreq.tsv"),
         summary=sp_dir("genotypes/snp_filter_summary.tsv"),
         pops=sp_dir("genotypes/pop_counts.tsv"),
+        snp_info=sp_dir("genotypes/snp_info.tsv"),
     params:
         min_ind=config["genotypes"]["min_ind_per_pop"],
         max_miss=config["genotypes"]["max_missing_per_pop"],
@@ -49,4 +50,5 @@ rule vcf_to_popfreq:
         "python {SCRIPTS}/vcf_to_popfreq.py --vcf {input.vcf} --sample-pop {input.sample_pop} "
         "--env-sites {input.sites} --min-ind-per-pop {params.min_ind} "
         "--max-missing-per-pop {params.max_miss} --min-maf {params.maf} "
-        "--out {output.freq} --out-summary {output.summary} --out-pops {output.pops} > {log} 2>&1"
+        "--out {output.freq} --out-summary {output.summary} --out-pops {output.pops} "
+        "--out-snp-info {output.snp_info} > {log} 2>&1"

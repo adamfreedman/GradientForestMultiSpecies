@@ -5,11 +5,12 @@
 # gradientForest only reports SNPs with R^2 > 0, so a SNP absent from a fit has
 # R^2 = 0 there. SNPs with observed R^2 = 0 get p = 1. All SNPs in popfreq.tsv
 # are tested, and p_bh is the Benjamini-Hochberg adjustment across all of them.
+# CHROM, POS and VCF_ID come from genotypes/snp_info.tsv.
 this_dir <- dirname(sub("^--file=", "", grep("^--file=", commandArgs(FALSE), value = TRUE)))
 source(file.path(this_dir, "gf_common.R"))
 
 opt <- parse_args()
-need(opt, c("rsq", "popfreq", "null", "out"))
+need(opt, c("rsq", "popfreq", "snp_info", "null", "out"))
 snps <- setdiff(names(fread(opt$popfreq, nrows = 0)), "popid")
 n_rand <- nrow(fread(opt$null, select = "rep"))
 
@@ -31,6 +32,10 @@ res[rsq <= 0, n_null_ge := n_rand]
 res[, n_random := n_rand]
 res[, p_empirical := (1 + n_null_ge) / (1 + n_rand)]
 res[, p_bh := p.adjust(p_empirical, method = "BH")]
+info <- fread(opt$snp_info, colClasses = list(character = c("snp", "CHROM", "VCF_ID")))
+if (!all(res$snp %in% info$snp)) stop("snp_info.tsv is missing SNPs that are in popfreq.tsv")
+res <- info[res, on = "snp"]
+setcolorder(res, c("snp", "CHROM", "POS", "VCF_ID"))
 setorder(res, p_empirical, -rsq)
 fwrite(res, opt$out, sep = "\t")
 

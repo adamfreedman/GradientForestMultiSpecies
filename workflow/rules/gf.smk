@@ -123,6 +123,7 @@ rule gf_snp_pvalues:
     input:
         rsq=m_dir("gf/snp_rsq.tsv"),
         freq=sp_file("genotypes/popfreq.tsv"),
+        snp_info=sp_file("genotypes/snp_info.tsv"),
         null=m_dir("gf/random_null.tsv"),
         snp_rsq=expand(
             m_dir("gf/random/batch{batch}_snp_rsq.tsv.gz"), batch=range(1, N_BATCHES + 1), allow_missing=True
@@ -138,7 +139,7 @@ rule gf_snp_pvalues:
         "../envs/r_gf.yaml"
     shell:
         "Rscript {SCRIPTS}/gf_snp_pvalues.R --rsq={input.rsq} --popfreq={input.freq} "
-        "--null={input.null} --out={output} {input.snp_rsq} > {log} 2>&1"
+        "--snp_info={input.snp_info} --null={input.null} --out={output} {input.snp_rsq} > {log} 2>&1"
 
 
 rule gf_predict:

@@ -5,7 +5,8 @@ Keeps biallelic SNPs; drops populations with fewer than --min-ind-per-pop
 individuals; drops SNPs with missing-genotype fraction > --max-missing-per-pop
 in any population, global MAF < --min-maf, or no frequency variation among
 populations. Frequencies are of the globally minor allele.
-Output: rows = populations (in env_sites order), columns = SNPs.
+Output: rows = populations (in env_sites order), columns = SNPs; --out-snp-info
+maps each SNP column name to its VCF CHROM, POS and ID.
 """
 import argparse
 import sys
@@ -27,6 +28,7 @@ def main():
     p.add_argument("--out", required=True)
     p.add_argument("--out-summary", required=True)
     p.add_argument("--out-pops", required=True)
+    p.add_argument("--out-snp-info", required=True)
     a = p.parse_args()
 
     sp = pd.read_csv(a.sample_pop, sep="\t", dtype=str)
@@ -47,7 +49,7 @@ def main():
     n_ind = np.bincount(pidx, minlength=P).astype(float)
 
     reasons = Counter()
-    ids, freqs = [], []
+    ids, freqs, info = [], [], []
     seen = Counter()
     for v in vcf:
         reasons["total"] += 1
@@ -77,6 +79,7 @@ def main():
         if seen[sid] > 1:
             sid = f"{sid}_{seen[sid]}"
         ids.append(sid)
+        info.append((sid, v.CHROM, v.POS, v.ID if v.ID is not None else "."))
         freqs.append(f.astype("float32"))
         reasons["kept"] += 1
 
@@ -92,6 +95,7 @@ def main():
     summ.to_csv(a.out_summary, sep="\t", index=False)
     pd.DataFrame({"popid": pops, "n_ind": n_ind.astype(int)}).to_csv(a.out_pops, sep="\t", index=False)
     print(summ.to_string(index=False))
+    pd.DataFrame(info, columns=["snp", "CHROM", "POS", "VCF_ID"]).to_csv(a.out_snp_info, sep="\t", index=False)
     print(f"matrix: {P} populations x {len(ids)} SNPs")
 
 
