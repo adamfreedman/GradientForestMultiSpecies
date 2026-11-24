@@ -44,11 +44,28 @@ RANDOM_BATCH = max(1, int(config["gf"].get("random_batch_size", 10)))
 N_BATCHES = -(-N_RANDOM // RANDOM_BATCH)  # ceiling
 
 
+def snp_scale(freq):
+    """number of SNP columns in popfreq.tsv / 14,000 (the size the base
+    resources were set for), at least 1"""
+    with open(freq) as fh:
+        n = fh.readline().count("\t")
+    return max(1.0, n / 14000)
+
+
 def random_runtime(wc, input):
     """SLURM minutes for one randomization batch: ~3 min per 100 trees per fit
-    (about 14k SNPs, 14 sites) doubled for margin, times the batch size."""
+    (about 14k SNPs, 14 sites) doubled for margin, times the batch size,
+    scaled up for more SNPs."""
     ntree = int(pd.read_csv(input.ntree, sep="\t")["ntree"].iloc[0])
-    return 30 + RANDOM_BATCH * math.ceil(6 * ntree / 100)
+    return 30 + RANDOM_BATCH * math.ceil(6 * ntree / 100 * snp_scale(input.freq))
+
+
+def random_mem(wc, input):
+    return math.ceil(16000 * snp_scale(input.freq))
+
+
+def fit_mem(wc, input):
+    return math.ceil(24000 * snp_scale(input.freq))
 
 
 def batch_reps(wc):

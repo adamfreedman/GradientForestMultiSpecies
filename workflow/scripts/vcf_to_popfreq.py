@@ -2,9 +2,11 @@
 """Population allele frequencies from a VCF, as gradient forest response variables.
 
 Keeps biallelic SNPs; drops populations with fewer than --min-ind-per-pop
-individuals; drops SNPs with missing-genotype fraction > --max-missing-per-pop
-in any population, global MAF < --min-maf, or no frequency variation among
-populations. Frequencies are of the globally minor allele.
+individuals. No MAF or missingness filter: gradient forest itself leaves out
+SNPs without enough signal (R^2 <= 0). The only SNPs dropped are those with no
+called genotype in some population (frequency undefined) and those with no
+frequency variation among populations (nothing to model).
+Frequencies are of the globally minor allele.
 Output: rows = populations (in env_sites order), columns = SNPs; --out-snp-info
 maps each SNP column name to its VCF CHROM, POS and ID.
 """
@@ -23,8 +25,6 @@ def main():
     p.add_argument("--sample-pop", required=True)
     p.add_argument("--env-sites", required=True)
     p.add_argument("--min-ind-per-pop", type=int, default=5)
-    p.add_argument("--max-missing-per-pop", type=float, default=0.5)
-    p.add_argument("--min-maf", type=float, default=0.05)
     p.add_argument("--out", required=True)
     p.add_argument("--out-summary", required=True)
     p.add_argument("--out-pops", required=True)
@@ -60,14 +60,11 @@ def main():
         called = gt != 2
         alt = np.where(gt == 1, 1.0, np.where(gt == 3, 2.0, 0.0))
         n_called = np.bincount(pidx, weights=called.astype(float), minlength=P)
-        if np.any(n_called == 0) or np.any(1 - n_called / n_ind > a.max_missing_per_pop):
-            reasons["missing_in_pop"] += 1
+        if np.any(n_called == 0):
+            reasons["no_calls_in_a_pop"] += 1
             continue
         n_alt = np.bincount(pidx, weights=alt, minlength=P)
         p_glob = n_alt.sum() / (2 * n_called.sum())
-        if min(p_glob, 1 - p_glob) < a.min_maf:
-            reasons["low_maf"] += 1
-            continue
         f = n_alt / (2 * n_called)
         if p_glob > 0.5:
             f = 1 - f
@@ -84,13 +81,13 @@ def main():
         reasons["kept"] += 1
 
     if not freqs:
-        sys.exit("ERROR: no SNPs passed filters")
+        sys.exit("ERROR: no SNPs left")
     mat = np.column_stack(freqs)
     df = pd.DataFrame(mat, columns=ids)
     df.insert(0, "popid", pops)
     df.to_csv(a.out, sep="\t", index=False, float_format="%.4f")
 
-    order = ["total", "not_biallelic_snp", "missing_in_pop", "low_maf", "no_among_pop_variation", "kept"]
+    order = ["total", "not_biallelic_snp", "no_calls_in_a_pop", "no_among_pop_variation", "kept"]
     summ = pd.DataFrame({"category": order, "n_snps": [reasons[k] for k in order]})
     summ.to_csv(a.out_summary, sep="\t", index=False)
     pd.DataFrame({"popid": pops, "n_ind": n_ind.astype(int)}).to_csv(a.out_pops, sep="\t", index=False)

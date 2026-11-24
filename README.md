@@ -25,7 +25,7 @@ workflow stops if two species point at the same popmap or latlongs file (a share
 | `min_ind_per_pop` | optional column: minimum individuals for a population to be kept for this species; blank or absent = `genotypes.min_ind_per_pop` in `config.yaml` |
 
 `config/config.yaml` sets the environmental-layer directory, the study area
-(any vector file, or a bounding box), predictor pruning, SNP filters and GF
+(any vector file, or a bounding box), predictor pruning, minimum individuals per population and GF
 parameters. Each option is commented in the file.
 
 ## Steps
@@ -38,12 +38,12 @@ parameters. Each option is commented in the file.
 | `validate_inputs` | Python | `{sp}/qc/validation.txt`, `{sp}/qc/sample_pop.tsv`, `{sp}/qc/unmapped_samples.tsv`. Individuals that do not map to a population with coordinates (in the VCF but not the popmap, in the popmap but not the VCF, or in a popid missing from latlongs) are excluded with a warning and listed in `unmapped_samples.tsv` and `qc.html`. Fails, naming the population(s) in the log, if a latlongs population has no individuals in the VCF; also fails on duplicate IDs or sites off the environmental grid |
 | `extract_env` | Python | `{sp}/env_sites.tsv` (environment at each population) |
 | `select_predictors` | Python | `{sp}/predictors/selected.txt`, `report.tsv`, `correlation.png` |
-| `vcf_to_popfreq` | Python | `{sp}/genotypes/popfreq.tsv` (populations × SNPs, minor-allele frequency); `snp_info.tsv` maps each SNP id (`snp_<VCF ID>`, or `<CHROM>_<POS>` when the VCF has no IDs) to its `CHROM`, `POS` and `VCF_ID` |
+| `vcf_to_popfreq` | Python | `{sp}/genotypes/popfreq.tsv` (populations × SNPs, minor-allele frequency); no MAF or missingness filter; drops only SNPs with no called genotype in some population or no frequency variation among populations (counts in `snp_filter_summary.tsv`); `snp_info.tsv` maps each SNP id (`snp_<VCF ID>`, or `<CHROM>_<POS>` when the VCF has no IDs) to its `CHROM`, `POS` and `VCF_ID` |
 | `install_gf` | R | one-time install of `extendedForest`/`gradientForest` from R-Forge |
 | `gf_fit` | R | `{sp}/gf/gf_model.rds`, `importance.tsv`, `snp_rsq.tsv`, `summary.tsv` |
 | `gf_randomize` | R | `{sp}/gf/random/batch{n}.tsv`: `n_random` fits (default 1000) with environment rows permuted and the same GF settings, run `random_batch_size` per SLURM job. `batch{n}_snp_rsq.tsv.gz` keeps each replicate's per-SNP R² for later per-SNP p-values |
 | `gf_random_summary` | R | `{sp}/gf/random_null.tsv`, `random_pvalues.tsv` |
-| `gf_snp_pvalues` | R | `{sp}/gf/snp_pvalues.tsv`: per-SNP `snp` id, VCF `CHROM`, `POS` and `VCF_ID`, observed R², empirical p = (1 + no. randomized fits with R² ≥ observed) / (n_random + 1) (SNPs with observed R² = 0 get p = 1), and `p_bh`, the Benjamini-Hochberg adjustment (`p.adjust(method = "BH")`) over all SNPs tested |
+| `gf_snp_pvalues` | R | `{sp}/gf/snp_pvalues.tsv`: per-SNP `snp` id, VCF `CHROM`, `POS` and `VCF_ID`, observed R², empirical p = (1 + no. randomized fits with R² ≥ observed) / (n_random + 1) and `p_bh`, the Benjamini-Hochberg adjustment (`p.adjust(method = "BH")`). Only SNPs in the observed model (R² > 0) are tested, and BH is over those; SNPs with R² ≤ 0 are listed with `NA` p-values |
 | `gf_predict` | R | `{sp}/gf/turnover_stack.tif` (transformed predictors), `turnover_rgb.tif`, PCA objects |
 | `qc_report` | R | `{sp}/qc.html` (`{sp}/refit_sigvars/qc_refit.html` for the refit), one self-contained file with figures embedded: warnings (including ntree not converging), ntree selection, model and randomization summaries, figures, predictor and SNP filtering, populations |
 | `plot_gf` | R | `{sp}/plots/`: turnover map, PCA biplot, R²-weighted and accuracy importance charts, observed-vs-random histograms, GF diagnostics |

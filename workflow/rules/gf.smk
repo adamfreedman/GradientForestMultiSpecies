@@ -55,7 +55,7 @@ rule gf_fit:
         args=GF_ARGS,
         ntree=NTREE_ARGS,
     resources:
-        mem_mb=24000,
+        mem_mb=fit_mem,
         runtime=2880,  # adaptive ntree may fit up to ~2x tune_max trees in total
     log:
         f"{OUT}/logs/{{model}}/gf_fit.log",
@@ -84,7 +84,7 @@ rule gf_randomize:
         first=lambda wc: batch_reps(wc)[0],
         last=lambda wc: batch_reps(wc)[1],
     resources:
-        mem_mb=16000,
+        mem_mb=random_mem,
         runtime=random_runtime,
     log:
         f"{OUT}/logs/{{model}}/gf_random/batch{{batch}}.log",

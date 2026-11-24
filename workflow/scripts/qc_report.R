@@ -64,11 +64,12 @@ unm <- fread(opt$unmapped, colClasses = "character")
 snp_p <- fread(opt$snp_pvals)
 snp_n <- snp_p$n_random[1]
 snp_tab <- data.table(
-  measure = c("SNPs tested", "SNPs with observed R² > 0",
+  measure = c("SNPs in the input (popfreq.tsv)", "SNPs tested (observed R² > 0)",
               sprintf("p ≤ %s", c(0.01, 0.05)), sprintf("BH-adjusted p ≤ %s", c(0.01, 0.05, 0.1))),
   n_snps = c(nrow(snp_p), sum(snp_p$rsq > 0),
-             sum(snp_p$p_empirical <= 0.01), sum(snp_p$p_empirical <= 0.05),
-             sum(snp_p$p_bh <= 0.01), sum(snp_p$p_bh <= 0.05), sum(snp_p$p_bh <= 0.1)))
+             sum(snp_p$p_empirical <= 0.01, na.rm = TRUE), sum(snp_p$p_empirical <= 0.05, na.rm = TRUE),
+             sum(snp_p$p_bh <= 0.01, na.rm = TRUE), sum(snp_p$p_bh <= 0.05, na.rm = TRUE),
+             sum(snp_p$p_bh <= 0.1, na.rm = TRUE)))
 preds <- fread(opt$predictors)
 
 # ---- ntree selection ---------------------------------------------------------
@@ -153,8 +154,8 @@ section(if (is_refit) "Predictors (selected from the full model)" else "Predicto
 section("SNP filtering", html_table(snpf)),
 section("Per-SNP tests",
         sprintf(paste0("<p>For each SNP, p = (1 + no. of the %d randomized fits with R&sup2; &ge; observed) / (%d + 1), ",
-                       "so the smallest possible p is %.2g. SNPs with observed R&sup2; = 0 get p = 1. ",
-                       "BH = Benjamini-Hochberg adjustment over all SNPs tested. Full table: <code>gf/snp_pvalues.tsv</code>.</p>"),
+                       "so the smallest possible p is %.2g. Only SNPs in the observed model (R&sup2; &gt; 0) are tested; ",
+                       "SNPs with R&sup2; &le; 0 have no p-value. BH = Benjamini-Hochberg adjustment over the SNPs tested. Full table: <code>gf/snp_pvalues.tsv</code>.</p>"),
                 snp_n, snp_n, 1 / (snp_n + 1)),
         html_table(snp_tab)),
 section("Populations", html_table(merge(sites[, .(popid, sitename, lat, long, snapped_km)], pops, by = "popid", all.x = TRUE)[order(as.numeric(popid))])),
