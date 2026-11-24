@@ -52,12 +52,26 @@ def snp_scale(freq):
     return max(1.0, n / 14000)
 
 
+_PRED = config["predictors"]
+SELECT_THRESHOLD = _PRED.get("corr_threshold") or "none"
+SELECT_RANK_BY = _PRED.get("rank_by", "importance")
+if SELECT_RANK_BY not in ("importance", "accuracy", "correlation"):
+    raise ValueError(f"predictors.rank_by must be importance, accuracy or correlation, got {SELECT_RANK_BY!r}")
+SCREEN_NTREE = int(_PRED.get("screen_ntree", 500))
+SELECT_ARGS = (
+    f"--rank_by={SELECT_RANK_BY} --screen_ntree={SCREEN_NTREE} "
+    f"--keep_priority={','.join(_PRED.get('keep_priority') or []) or 'none'}"
+)
+
+
 def random_runtime(wc, input):
-    """SLURM minutes for one randomization batch: ~3 min per 100 trees per fit
-    (about 14k SNPs, 14 sites) doubled for margin, times the batch size,
-    scaled up for more SNPs."""
+    """SLURM minutes for one randomization batch. Measured ~1.1 min per 100 trees
+    per fit for 56k SNPs, 9 predictors and 14 sites; allow 1 min per 100 trees
+    per 10 predictors per 14k SNPs (~3x margin)."""
     ntree = int(pd.read_csv(input.ntree, sep="\t")["ntree"].iloc[0])
-    return 30 + RANDOM_BATCH * math.ceil(6 * ntree / 100 * snp_scale(input.freq))
+    n_pred = sum(1 for l in open(input.preds) if l.strip())
+    per_rep = ntree / 100 * max(1.0, n_pred / 10) * snp_scale(input.freq)
+    return 30 + RANDOM_BATCH * math.ceil(per_rep)
 
 
 def random_mem(wc, input):
@@ -124,6 +138,7 @@ def sp_file(sub):
 def model_predictors(wc):
     sp = model_species(wc)
     return f"{OUT}/{sp}/{REFIT_DIR}/predictors.txt" if is_refit(wc) else f"{OUT}/{sp}/predictors/selected.txt"
+
 
 
 def model_label(wc):

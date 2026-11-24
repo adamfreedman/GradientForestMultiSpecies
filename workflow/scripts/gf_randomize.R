@@ -3,6 +3,8 @@
 # environment table (so predictor correlations are kept but decoupled from
 # allele frequencies) and refit with the same settings as the observed model.
 # Each replicate has its own seed, so results do not depend on batch size.
+# The predictors are the observed model's own set, so each SNP's observed R^2 is
+# compared with what permuted environments give under the same model.
 this_dir <- dirname(sub("^--file=", "", grep("^--file=", commandArgs(FALSE), value = TRUE)))
 source(file.path(this_dir, "gf_common.R"))
 

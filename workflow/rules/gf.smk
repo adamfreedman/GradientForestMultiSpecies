@@ -37,6 +37,37 @@ NTREE_ARGS = f"--ntree={GF.get('ntree', 'auto')}" + (
 )
 
 
+rule select_predictors:
+    """Candidate variables, and which of each correlated set to keep (see predictors in config.yaml)."""
+    input:
+        gf_ok=rules.install_gf.output,
+        sites=sp_dir("env_sites.tsv"),
+        freq=sp_dir("genotypes/popfreq.tsv"),
+        layers=rules.prep_env_stack.output.layers,
+    output:
+        selected=sp_dir("predictors/selected.txt"),
+        candidates=sp_dir("predictors/candidates.txt"),
+        report=sp_dir("predictors/report.tsv"),
+        heatmap=sp_dir("predictors/correlation.png"),
+    params:
+        include=predictor_include(),
+        thr=SELECT_THRESHOLD,
+        select=SELECT_ARGS,
+        args=GF_ARGS,
+    resources:
+        mem_mb=fit_mem,
+        runtime=240,
+    log:
+        f"{OUT}/logs/{{species}}/select_predictors.log",
+    conda:
+        "../envs/r_gf.yaml"
+    shell:
+        "Rscript {SCRIPTS}/select_predictors.R --env_sites={input.sites} --popfreq={input.freq} "
+        "--layers={input.layers} --include={params.include} --threshold={params.thr} {params.select} "
+        "{params.args} --out_list={output.selected} --out_candidates={output.candidates} "
+        "--out_report={output.report} --out_heatmap={output.heatmap} > {log} 2>&1"
+
+
 rule gf_fit:
     input:
         gf_ok=rules.install_gf.output,

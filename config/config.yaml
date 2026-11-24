@@ -42,8 +42,18 @@ env:
 
 predictors:
   include: all            # "all" or a list such as [bio1, bio2, bio12]
-  corr_threshold: 0.8     # prune pairs with |Pearson r| above this at the sites; null = no pruning
-  keep_priority: []       # variables never dropped by pruning if avoidable
+  # Of two variables with |Pearson r| above corr_threshold at the sites, keep only
+  # the one ranked higher; no two kept variables are correlated above it. null = keep all.
+  corr_threshold: 0.8
+  # How variables are ranked:
+  #   importance  - R^2-weighted importance in a screening gradient forest fitted with
+  #                 all candidate variables (the one that fits the SNPs better is kept)
+  #   accuracy    - the same, using accuracy importance
+  #   correlation - least correlated with the other variables first (ignores the SNPs)
+  # The randomized fits use the selected variables, so tests are conditional on this model.
+  rank_by: importance
+  screen_ntree: 500       # trees in the screening fit
+  keep_priority: []       # variables ranked first, so kept unless correlated with each other
 
 genotypes:
   min_ind_per_pop: 5          # populations with fewer genotyped individuals are dropped;

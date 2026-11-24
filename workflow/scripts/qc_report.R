@@ -19,7 +19,13 @@ esc <- function(x) {
 }
 html_table <- function(dt, digits = 4) {
   dt <- as.data.frame(dt)
-  for (j in seq_along(dt)) if (is.double(dt[[j]])) dt[[j]] <- signif(dt[[j]], digits)
+  # plain numbers (no scientific notation unless very large or very small), per cell
+  fmt <- function(v) vapply(v, function(x) {
+    if (is.na(x)) return("")
+    x <- signif(x, digits)
+    format(x, scientific = x != 0 && (abs(x) >= 1e7 || abs(x) < 1e-5), trim = TRUE, big.mark = "")
+  }, character(1))
+  for (j in seq_along(dt)) if (is.double(dt[[j]])) dt[[j]] <- fmt(dt[[j]])
   head <- paste0("<tr>", paste0("<th>", esc(names(dt)), "</th>", collapse = ""), "</tr>")
   body <- apply(dt, 1, function(r) paste0("<tr>", paste0("<td>", esc(ifelse(is.na(r), "", trimws(r))), "</td>",
                                                          collapse = ""), "</tr>"))
@@ -71,6 +77,7 @@ snp_tab <- data.table(
              sum(snp_p$p_bh <= 0.01, na.rm = TRUE), sum(snp_p$p_bh <= 0.05, na.rm = TRUE),
              sum(snp_p$p_bh <= 0.1, na.rm = TRUE)))
 preds <- fread(opt$predictors)
+if (!is_refit) preds <- preds[order(status != "kept", rank)]
 
 # ---- ntree selection ---------------------------------------------------------
 tun <- fread(opt$tuning)
@@ -115,6 +122,158 @@ plots <- file.path(opt$spdir, "plots")
 section <- function(title, ...) paste0("<h2>", esc(title), "</h2>\n", paste(..., sep = "\n"))
 pre <- function(x) paste0("<pre>", esc(paste(x, collapse = "\n")), "</pre>")
 
+# plain-language explanations shown before each figure and table
+legend <- function(...) paste0('<div class="legend">', paste0(..., collapse = ""), "</div>")
+tech <- function(...) paste0('<p class="tech"><b>Technical detail:</b> ', paste0(..., collapse = ""), "</p>")
+n_rand <- pv$n_random[1]
+n_snps_in <- summ$n_snps[1]
+pv_show <- copy(pv)
+pv_show[, meaning := fcase(
+  statistic == "n_pos_rsq", "Number of SNPs whose allele frequencies the environment explains at all (R\u00b2 > 0)",
+  statistic == "mean_rsq", "Average strength of fit (R\u00b2) for those SNPs",
+  statistic == "sum_rsq", "Total explained variation, summed over those SNPs",
+  startsWith(statistic, "imp_"), paste0("Importance of ", sub("^imp_", "", statistic), " (R\u00b2-weighted)"),
+  startsWith(statistic, "acc_"), paste0("Importance of ", sub("^acc_", "", statistic), " (accuracy)"),
+  default = "")]
+setcolorder(pv_show, c("statistic", "meaning"))
+
+intro_html <- legend(
+  "<p><b>How to read this report.</b> Gradient forest asks whether differences in allele frequencies among ",
+  "populations line up with differences in their environment, and which environmental variables matter most. ",
+  "For each SNP, it fits a model predicting the SNP's allele frequency in each population from the environmental ",
+  "variables at that population's site. <b>R&sup2;</b> is the fraction of the among-population variation in that ",
+  "SNP's allele frequency the model explains (0 = none, 1 = all). SNPs whose R&sup2; is above 0 are said to ",
+  "<i>enter the model</i>; the rest are ignored.</p>",
+  "<p>Because a flexible model can find patterns in random noise, every result here is compared with ",
+  sprintf("<b>%d randomized fits</b>: the same analysis repeated after shuffling which population gets which ", n_rand),
+  "environment. Shuffling keeps the environmental data and the genetic data each intact but breaks any real link ",
+  "between them. A result that the real data beat in (nearly) all randomized fits is unlikely to be chance. ",
+  sprintf("The <b>p-value</b> is the fraction of randomized fits that did at least as well as the real data; with %d fits ", n_rand),
+  sprintf("the smallest possible p is %.2g.</p>", 1 / (n_rand + 1)))
+
+summary_legend <- legend(
+  "<p>The size of the analysis and how well the model fits overall.</p><ul>",
+  "<li><b>n_sites</b>: populations used. <b>n_predictors</b>: environmental variables used.</li>",
+  "<li><b>n_snps</b>: SNPs given to gradient forest. <b>n_pos_rsq</b>: SNPs that entered the model (R&sup2; &gt; 0). ",
+  "<b>mean_rsq</b> and <b>sum_rsq</b>: average and total R&sup2; of those SNPs.</li>",
+  "<li><b>n_snps_few_unique</b>: SNPs with 5 or fewer distinct allele frequencies across populations; the software ",
+  "warns about these but still uses them. <b>n_snps_constant</b>: SNPs with the same frequency everywhere, which can ",
+  "never enter the model. <b>n_rf_errors</b> / <b>n_rf_warnings</b>: problems reported while fitting (details in the gf_fit log).</li>",
+  "<li><b>ntree</b>, <b>maxLevel</b>, <b>corr_threshold</b>: model settings (see Number of trees below and config.yaml).</li></ul>")
+
+ntree_legend <- legend(
+  "<p>Each SNP's model is an average over many decision trees; more trees give more stable results but take longer. ",
+  "The workflow starts with a small number of trees and keeps doubling it until two successive runs give ",
+  "essentially the same answer. The table lists each run; the figure shows how closely each run agreed with the ",
+  "previous, smaller one.</p>",
+  "<p><b>Figure:</b> each panel is one agreement measure, plotted against the number of trees. The red dashed line is ",
+  "the agreement required; the blue vertical line marks the number of trees chosen. Left: correlation of per-SNP ",
+  "R&sup2; between runs (higher is better). Middle: largest change in any variable's importance (lower is better). ",
+  "Right: correlation of the predicted genetic differences between map locations (higher is better).</p>")
+
+random_table_legend <- legend(
+  "<p>This table tests the whole model, and each environmental variable, against the randomized fits. ",
+  "Each row is one statistic: <b>observed</b> is its value for the real data, <b>null_mean</b> its average over the ",
+  sprintf("%d randomized fits, <b>null_q95</b> the value that only 5%% of randomized fits exceeded, and ", n_rand),
+  "<b>p_empirical</b> the fraction of randomized fits that matched or beat the real data. Small p (for example ",
+  "&le; 0.05) means the real data show more environmental association than chance; an observed value above ",
+  "null_q95 corresponds to p &le; 0.05.</p><ul>",
+  "<li><b>n_pos_rsq</b>: how many SNPs show any association with the environment (R&sup2; &gt; 0). Random data ",
+  "also produce some, so the question is whether the real data produce more.</li>",
+  "<li><b>mean_rsq</b>: how strong the association is, on average, for those SNPs.</li>",
+  "<li><b>sum_rsq</b>: the total association across all SNPs (roughly n_pos_rsq &times; mean_rsq); combines how many ",
+  "SNPs respond and how strongly.</li>",
+  "<li><b>imp_<i>variable</i></b> (R&sup2;-weighted importance): how much of the explained variation is due to this ",
+  "variable. Each SNP's R&sup2; is divided among the variables according to how much each one helped predict that SNP, ",
+  "then averaged over the SNPs in the model, so the imp_ values of all variables add up to mean_rsq. A variable ",
+  "with a significant imp_ value explains more genetic variation than it would by chance.</li>",
+  "<li><b>acc_<i>variable</i></b> (accuracy importance): how much worse the predictions get, on average over the ",
+  "SNPs in the model, when this variable's values are scrambled. It measures the same thing as imp_ but is not ",
+  "scaled by each SNP's R&sup2;, so it can be negative (scrambling did not hurt) and its units are those of squared ",
+  "allele-frequency error. Agreement between imp_ and acc_ makes a variable's importance more convincing.</li></ul>",
+  tech("each randomized fit permutes whole rows of the population-by-environment table (keeping the correlations ",
+       "among variables) and refits with the same variables, settings and number of trees as the real model. ",
+       "p = (1 + no. randomized &ge; observed) / (n_random + 1), one-sided. imp_ = gradientForest ",
+       "<code>importance(type = \"Weighted\")</code>; acc_ = <code>importance(type = \"Accuracy\")</code>, the mean ",
+       "randomForest %IncMSE over SNPs with R&sup2; &gt; 0."))
+
+random_fig_legend <- legend(
+  sprintf("<p><b>Figure: real model vs. randomized fits.</b> Each panel is one whole-model statistic. The grey histogram shows its values in the %d randomized fits; ", n_rand),
+  "the red line is the value for the real data, with its p-value. A red line far to the right of the histogram ",
+  "means the real data show much more environmental association than shuffled data. Panels: number of SNPs with ",
+  "R&sup2; &gt; 0, their mean R&sup2;, and the total R&sup2;.</p>")
+
+importance_fig_legend <- legend(
+  "<p><b>Figures: importance of each environmental variable.</b> Left: R&sup2;-weighted importance; right: ",
+  "accuracy importance (both explained in the table above). Each bar is the variable's importance in the real data, ",
+  "ordered from most to least important. The thin red line under each bar shows the range of importance in the ",
+  "randomized fits (5th to 95th percentile; dot = average). A bar that extends past the right end of its red ",
+  "line is more important than expected by chance (dark blue bars, p &le; 0.05); grey bars cannot be distinguished ",
+  "from chance.</p>")
+
+turnover_legend <- legend(
+  "<p><b>What turnover means.</b> The fitted model predicts, for every location on the map, the genetic makeup ",
+  "expected there given its environment. <i>Turnover</i> is how much that predicted genetic makeup changes between ",
+  "places: locations with similar predicted genetic makeup are close in <i>turnover space</i>, and locations with ",
+  "different makeup are far apart. These are predictions from environment alone, including at unsampled locations.</p>",
+  "<p><b>Left, map:</b> each grid cell is coloured by its predicted genetic makeup. Cells of similar colour are ",
+  "expected to be genetically similar; sharp colour changes mark where the environment predicts rapid genetic change. ",
+  "Colours have no meaning on their own beyond similarity. White circles are the sampled populations; lines are the ",
+  "study-area outline and country borders.</p>",
+  "<p><b>Right, turnover space:</b> the same grid cells, now placed by their predicted genetic makeup instead of ",
+  "their geography (first two principal components, PC1 and PC2; percentages are the share of variation each ",
+  "shows). Points are coloured as in the map. Arrows show the environmental variables: an arrow points toward ",
+  "cells with high values of that variable, and longer arrows mean the variable drives more of the genetic differences ",
+  "shown. Labelled circles are the sampled populations.</p>",
+  tech("each predictor is transformed with <code>predict(gf)</code> onto its cumulative-importance scale; a PCA ",
+       "(unscaled) on the transformed predictors listed in the map subtitle gives PC1-3, which are mapped to colour as ",
+       "red = PC1 + PC2, green = &minus;PC2, blue = PC3 + PC2 &minus; PC1, each rescaled to 0-255 across grid cells ",
+       "(Fitzpatrick &amp; Keller 2015). Values beyond the sampled environmental range are extrapolated."))
+
+predictors_legend <- legend(
+  "<p>Environmental variables that are strongly correlated with each other carry largely the same information and ",
+  "make it hard to tell which one matters, so the workflow keeps only one variable from each strongly correlated ",
+  "set: no two kept variables have a correlation (|r|) above the threshold across the sampled sites. ",
+  "To decide which one to keep, the model is first fitted with <i>all</i> the variables (a \"screening\" fit), and ",
+  "the variables are ranked by how much of the genetic variation each one explains. Going down that ranking, ",
+  "each variable is kept unless it is strongly correlated with one already kept. So of two correlated variables, ",
+  "the one that fits the genetic data better is kept.</p>",
+  "<p>The randomized fits use the same kept variables, so every test in this report asks whether shuffled data ",
+  "could produce the fit of <i>this</i> model. Because the variables were chosen using the real data, the ",
+  "whole-model and variable-importance p-values are somewhat optimistic; the per-SNP tests are conditional on the ",
+  "chosen model by design.</p>",
+  "<ul><li><b>status</b>: kept or dropped. <b>rank</b>: position in the ranking (1 = explains the most).</li>",
+  "<li><b>screen_importance</b>: the variable's importance in the screening fit with all variables (its share of ",
+  "the explained genetic variation, as imp_ above).</li>",
+  "<li><b>mean_abs_r</b>: its average correlation with the other variables (0 to 1).</li>",
+  "<li><b>reason</b>: for a dropped variable, the kept variable it is too strongly correlated with.</li></ul>",
+  "<p><b>Figure:</b> correlation between every pair of variables across the sampled sites (red = positive, blue = ",
+  "negative, darker = stronger, value printed in each cell); kept variables are in bold.</p>",
+  tech("ranking and threshold are set by <code>predictors.rank_by</code> and <code>predictors.corr_threshold</code> ",
+       "in config.yaml; with <code>rank_by: correlation</code> the ranking ignores the genetic data (least correlated ",
+       "with the others first)."))
+
+snp_filter_legend <- legend(
+  "<p>SNPs removed before the analysis. Only SNPs that cannot be analysed are removed: those with no genotype data ",
+  "in some population (so no allele frequency there) and those with the same allele frequency in every population ",
+  "(nothing to explain). There is no filter on allele frequency or missing data; SNPs with too little information ",
+  "simply do not enter the model.</p>")
+
+snp_tests_legend <- legend(
+  "<p>Which individual SNPs are associated with the environment more strongly than chance. Only SNPs that entered ",
+  "the model (R&sup2; &gt; 0) are tested. A SNP's p-value is the fraction of randomized fits in which that SNP got an ",
+  "R&sup2; at least as high as in the real data. Because many SNPs are tested at once, some small p-values are ",
+  "expected by chance; the <b>BH-adjusted p</b> (Benjamini-Hochberg) corrects for this, so that among SNPs with BH ",
+  "&le; 0.05, about 5% are expected to be false positives. The full per-SNP table, with positions, is ",
+  "<code>gf/snp_pvalues.tsv</code>.</p>",
+  tech(sprintf("p = (1 + no. of the %d randomized fits with R&sup2; &ge; observed) / (%d + 1); smallest possible p = %.2g. ",
+               snp_n, snp_n, 1 / (snp_n + 1)),
+       "BH is applied over the tested SNPs only; SNPs with R&sup2; &le; 0 have no p-value."))
+
+pops_legend <- legend("<p>Populations in the analysis: location, number of individuals with genotypes (n_ind), ",
+                      "and snapped_km, the distance a site was moved to the nearest grid cell with environmental data ",
+                      "(0 = not moved). Populations with too few individuals are left out (see Warnings).</p>")
+
 warn_html <- if (length(warnings)) {
   paste0('<div class="warn"><b>Warnings</b><ul>', paste0("<li>", esc(warnings), "</li>", collapse = ""), "</ul></div>")
 } else '<div class="ok">No warnings.</div>'
@@ -135,6 +294,9 @@ table{border-collapse:collapse;font-size:13px;margin:8px 0} th,td{border:1px sol
 th{background:#f3f3f3} pre{background:#f7f7f7;padding:8px;font-size:12px;overflow-x:auto}
 .warn{background:#fff4e5;border-left:4px solid #e69500;padding:8px 12px} .ok{background:#eef8ee;border-left:4px solid #3a3;padding:8px 12px}
 .bad{color:#b00;font-weight:bold} img{border:1px solid #eee;margin:6px 0}
+.legend{background:#f4f7fb;border-left:4px solid #6b8fb8;padding:4px 12px;margin:8px 0;font-size:14px;line-height:1.45}
+.legend ul{margin:4px 0 8px 0;padding-left:20px} .legend li{margin:3px 0}
+.tech{font-size:12px;color:#555}
 </style></head><body>
 <h1>', esc(sp), ': gradient forest QC</h1><p>generated ', format(Sys.time(), "%Y-%m-%d %H:%M"), '</p>',
 warn_html,
@@ -143,22 +305,23 @@ if (is_refit) paste0('<div class="warn"><b>Refit on significant predictors.</b> 
   '). The randomization p-values below are conditional on that choice, which used the same data, so they ',
   'are optimistic; the full model (<a href="../qc.html">../qc.html</a>) is the primary test. Use this refit for ',
   'maps, turnover space and per-SNP R&sup2; without the non-significant predictors.</div>'),
-section("Model summary", html_table(summ)),
-section("Number of trees", ntree_txt, html_table(tun), if (!is.null(tun_png)) img(tun_png)),
-section("Observed vs. randomized fits", html_table(pv), img(file.path(plots, "random_vs_real.png")),
+intro_html,
+section("Model summary", summary_legend, html_table(summ)),
+section("Observed vs. randomized fits", random_table_legend, html_table(pv_show),
+        random_fig_legend, img(file.path(plots, "random_vs_real.png")),
+        importance_fig_legend,
         img(file.path(plots, "importance_r2weighted.png"), "49%"), img(file.path(plots, "importance_accuracy.png"), "49%")),
-section("Turnover", img(file.path(plots, "map_turnover_rgb.png"), "49%"), img(file.path(plots, "biplot_turnover_pca.png"), "49%")),
+section("Turnover", turnover_legend,
+        img(file.path(plots, "map_turnover_rgb.png"), "49%"), img(file.path(plots, "biplot_turnover_pca.png"), "49%")),
+section("Per-SNP tests", snp_tests_legend, html_table(snp_tab)),
 section(if (is_refit) "Predictors (selected from the full model)" else "Predictors",
-        if (is_refit) "<p>Kept = empirical p &le; alpha for at least one importance metric in the full model. The correlation heat map is from the full predictor set.</p>",
+        if (is_refit) legend("<p>In this refit, the variables kept are those whose importance beat the randomized fits ",
+                             "of the full model (p &le; alpha for at least one importance measure). The correlation figure ",
+                             "is from the full set of variables.</p>") else predictors_legend,
         html_table(preds), img(opt$heatmap, "60%")),
-section("SNP filtering", html_table(snpf)),
-section("Per-SNP tests",
-        sprintf(paste0("<p>For each SNP, p = (1 + no. of the %d randomized fits with R&sup2; &ge; observed) / (%d + 1), ",
-                       "so the smallest possible p is %.2g. Only SNPs in the observed model (R&sup2; &gt; 0) are tested; ",
-                       "SNPs with R&sup2; &le; 0 have no p-value. BH = Benjamini-Hochberg adjustment over the SNPs tested. Full table: <code>gf/snp_pvalues.tsv</code>.</p>"),
-                snp_n, snp_n, 1 / (snp_n + 1)),
-        html_table(snp_tab)),
-section("Populations", html_table(merge(sites[, .(popid, sitename, lat, long, snapped_km)], pops, by = "popid", all.x = TRUE)[order(as.numeric(popid))])),
+section("SNP filtering", snp_filter_legend, html_table(snpf)),
+section("Number of trees", ntree_legend, ntree_txt, html_table(tun), if (!is.null(tun_png)) img(tun_png)),
+section("Populations", pops_legend, html_table(merge(sites[, .(popid, sitename, lat, long, snapped_km)], pops, by = "popid", all.x = TRUE)[order(suppressWarnings(as.numeric(popid)), popid)])),
 section("Individuals not mapped to a population",
         if (nrow(unm)) paste0("<p>Excluded from the analysis. <i>missing_in_vcf</i> = in the popmap but not the VCF; ",
                               "<i>missing_in_popmap</i> = in the VCF but not the popmap; <i>popid_in_latlongs</i> = ",
