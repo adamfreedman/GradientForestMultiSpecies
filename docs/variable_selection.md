@@ -62,21 +62,25 @@ The two methods differ by only one or two variables:
 
 ### 3.2 Model fit and SNP counts
 
-| Model | SNPs with R² > 0 (null mean; p) | Mean R² (p) | SNPs at BH ≤ 0.05 | SNPs at BH ≤ 0.1 |
-|---|---|---|---|---|
-| **Chimpanzee** | | | | |
-| A. Correlation pruning | 2,772 (826; 0.012) | 0.237 (0.004) | 960 | 2,390 |
-| B. Fit-based | 2,675 (805; 0.015) | 0.246 (0.007) | 919 | 2,355 |
-| C. All predictors | 2,618 (784; 0.014) | 0.245 (0.012) | 785 | 2,363 |
-| Refit after A or B (bio19, bio4) | 2,904 (764; 0.007) | 0.284 (0.005) | 1,401 | 2,714 |
-| Refit after C (bio19, bio4, bio16) | 2,868 (730; 0.009) | 0.287 (0.005) | 1,490 | 2,761 |
-| **Trachylepis** | | | | |
-| A. Correlation pruning | 15,701 (2,382; 0.001) | 0.436 (0.001) | 13,939 | 15,537 |
-| B. Fit-based | 16,234 (2,431; 0.001) | 0.438 (0.002) | 14,280 | 15,987 |
-| C. All predictors | 15,702 (2,318; 0.001) | 0.460 (0.002) | 13,644 | 15,517 |
-| Refit after A | 15,365 (1,971; 0.001) | 0.492 (0.001) | 13,971 | 15,318 |
-| Refit after B | 16,071 (2,069; 0.001) | 0.482 (0.001) | 14,293 | 16,017 |
-| Refit after C | 15,659 (2,183; 0.001) | 0.529 (0.002) | 14,394 | 15,590 |
+| Model | SNPs with R² > 0 (null mean; p) | Mean R² (p) | Median R² | SNPs at BH ≤ 0.05 | SNPs at BH ≤ 0.1 |
+|---|---|---|---|---|---|
+| **Chimpanzee** | | | | | |
+| A. Correlation pruning | 2,772 (826; 0.012) | 0.237 (0.004) | 0.205 | 960 | 2,390 |
+| B. Fit-based | 2,675 (805; 0.015) | 0.246 (0.007) | 0.212 | 919 | 2,355 |
+| C. All predictors | 2,618 (784; 0.014) | 0.245 (0.012) | 0.209 | 785 | 2,363 |
+| Refit after A or B (bio19, bio4) | 2,904 (764; 0.007) | 0.284 (0.005) | 0.243 | 1,401 | 2,714 |
+| Refit after C (bio19, bio4, bio16) | 2,868 (730; 0.009) | 0.287 (0.005) | 0.246 | 1,490 | 2,761 |
+| **Trachylepis** | | | | | |
+| A. Correlation pruning | 15,701 (2,382; 0.001) | 0.436 (0.001) | 0.474 | 13,939 | 15,537 |
+| B. Fit-based | 16,234 (2,431; 0.001) | 0.438 (0.002) | 0.476 | 14,280 | 15,987 |
+| C. All predictors | 15,702 (2,318; 0.001) | 0.460 (0.002) | 0.494 | 13,644 | 15,517 |
+| Refit after A | 15,365 (1,971; 0.001) | 0.492 (0.001) | 0.568 | 13,971 | 15,318 |
+| Refit after B | 16,071 (2,069; 0.001) | 0.482 (0.001) | 0.548 | 14,293 | 16,017 |
+| Refit after C | 15,659 (2,183; 0.001) | 0.529 (0.002) | 0.575 | 14,394 | 15,590 |
+
+Mean and median R² are over SNPs with R² > 0, the set the model statistics
+and per-SNP tests use. Median R² has no randomization p-value; only mean R² is
+tested against the null.
 
 Overlap of significant SNPs (BH ≤ 0.1) between B and C: chimp 2,134 shared
 (91% of B), trachylepis 15,052 shared (94% of B). Refits: chimp 2,553 shared
@@ -99,12 +103,60 @@ Overlap of significant SNPs (BH ≤ 0.1) between B and C: chimp 2,134 shared
   - The trachylepis signal is very strong (16,000 SNPs against a null of
     ~2,400), which suggests that much of it follows population structure that
     lines up with the environment.
-- **All predictors (C):** fitting all 19 variables doesn't improve the fit. It
+- **All predictors (C):** fitting all 19 variables doesn't improve the fit (see 3.2.1 for the higher mean R² in trachylepis). It
   does make the variable-level results harder to read. Correlated partners
   share importance and pass the randomization test together: in chimp, bio16
   (r = 0.98 with bio19) joins bio19; in trachylepis, 10 of 19 variables pass,
   against 5 after selection. **Selection matters for interpreting individual
   variables, not for which SNPs are detected.**
+
+### 3.2.1 Why the all-predictor model has a higher mean R² in trachylepis
+
+In trachylepis, model C (all 19 variables) has a higher mean R² than model B
+(0.460 against 0.438), and a higher median R² (0.494 against 0.476). This might
+suggest that the extra variables fit the allele frequencies better. Comparing
+the two models SNP by SNP shows that the difference mostly reflects *which
+SNPs* each model counts as having R² > 0:
+
+| | Trachylepis | Chimpanzee |
+|---|---|---|
+| SNPs with R² > 0 in both models | 15,288 | 2,411 |
+| … mean R², B vs C | 0.461 vs 0.470 | 0.268 vs 0.261 |
+| … median R², B vs C | 0.504 vs 0.505 | 0.239 vs 0.228 |
+| … SNPs with higher R² in C | 58% | 40% |
+| SNPs with R² > 0 only in B (mean R²; BH ≤ 0.1) | 946 (0.063; 810) | 264 (0.045; 128) |
+| SNPs with R² > 0 only in C (mean R²; BH ≤ 0.1) | 414 (0.066; 381) | 207 (0.055; 130) |
+
+- **The SNPs found by both models fit almost equally well.** Their median R²
+  is the same in B and C (0.504 against 0.505). The mean is 0.009 higher in C,
+  but C fits better for only 58% of these SNPs, and the difference changes
+  sign across the R² range.
+- **Model B detects more weakly associated SNPs.** 946 SNPs have R² > 0 only
+  in B, against 414 only in C, so B has 532 more. Almost all of them have weak
+  associations (mean R² ≈ 0.06), but 810 of the 946 are still significant at
+  BH ≤ 0.1. Including them pulls B's mean R² down by 0.023 (from 0.461 to
+  0.438); C's smaller set of weak SNPs pulls its mean down by only 0.010.
+- **Breakdown of the 0.022 difference in mean R²:** about 0.013 comes from B
+  detecting more weak SNPs, and about 0.009 from slightly higher R² for shared
+  SNPs in C.
+
+**Interpretation.** A lower mean R² in model B does not mean it fits worse. It
+detects more SNPs with weak but significant associations, and fits the
+strongly associated SNPs just as well. This fits the idea that removing
+redundant predictors reduces noise. In a random forest, every candidate split
+on an uninformative variable is a chance to fit noise. For a SNP with a weak
+association, that noise can push the out-of-bag R² below zero, and the SNP is
+then dropped from the model. The higher null mean R² with all 19 variables
+(0.134 against 0.128) shows that extra predictors also add flexibility under
+randomization, raising the bar SNPs have to clear. Chimp shows the same
+pattern, more weakly: 264 SNPs only in B against 207 only in C. There, shared
+SNPs fit slightly *better* in B (median 0.239 against 0.228). This mechanism
+is a plausible reading of the pattern, not something these runs test directly.
+
+**Implication for reporting.** Mean R² over SNPs with R² > 0 depends on how
+many weak SNPs pass the R² > 0 cut-off. It should therefore be read together
+with the number of such SNPs, and should not be used on its own to compare
+models with different predictor sets.
 
 ### 3.3 Is the fit-based choice stable? Screening-fit seeds
 
@@ -221,4 +273,7 @@ because no principled cut-off has been settled on.
 > correlation alone identified largely the same SNPs (91–94% overlap at FDR
 > ≤ 0.1) with similar overall fit. Without selection, however, correlated
 > variables shared importance, which complicated interpretation of individual
-> predictors.
+> predictors. The selected predictor set also detected more SNPs with weak but
+> significant associations than the full set (946 vs. 414 SNPs with R² > 0
+> unique to each model in *T. affinis*), while the SNPs detected by both
+> models fit equally well (median R² 0.504 vs. 0.505).
