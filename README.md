@@ -19,7 +19,7 @@ workflow stops if two species point at the same popmap or latlongs file (a share
 |---|---|
 | `species` | short name used in output paths (letters, digits, `_ . -`) |
 | `vcf` | genotype VCF (plain or bgzipped) |
-| `popmap` | whitespace-delimited, header `sampleid popid`: VCF sample → population |
+| `popmap` | header `sampleid popid`, columns separated by spaces and/or tabs (or commas): VCF sample → population. Empty fields are an error |
 | `latlongs` | CSV, header `popid,sitename,lat,long` |
 | `id_regex` | optional column: regex deleted from VCF sample IDs before matching `popmap` (e.g. `^MCZA_`); omit it when the IDs already match |
 | `min_ind_per_pop` | optional column: minimum individuals for a population to be kept for this species; blank or absent = `genotypes.min_ind_per_pop` in `config.yaml` |
@@ -86,3 +86,22 @@ For a quick test, set `gf: n_random: 5` in the config.
 * Why fit-based selection is the default: [docs/variable_selection.md](docs/variable_selection.md) compares four approaches: (A) the original correlation-only pruning, (B) fit-based selection (the default), (C) all predictors and (D) fit-based selection with a 1% importance floor. It also covers the refit on significant variables, and reports the seed and leave-one-population-out stability tests on the chimpanzee and Trachylepis data.
 * The randomizations shuffle whole rows of the predictor table, which keeps the correlations among predictors. Each randomized fit uses the same predictors as the observed model, so the tests ask whether shuffled environments could give the observed fit (per-SNP R², whole-model statistics, importance) under that model. Because the predictors were chosen with the real data, the whole-model and importance p-values are conditional on that choice and somewhat optimistic; the per-SNP tests are conditional on the model by design. Observed and randomized fits use the same `ntree` and `maxLevel`. Empirical p-values are `(1 + #null ≥ obs) / (1 + N)`.
 * Turnover colours follow the original script: an unscaled PCA of the transformed predictors, with RGB = (PC1+PC2, −PC2, PC3+PC2−PC1) rescaled to 0–255. Each PC's sign is fixed so that its largest loading is positive.
+
+## Tests
+
+GitHub Actions (`.github/workflows/tests.yml`) runs two jobs on every push and pull request:
+
+* **Unit tests and dry runs** (a few minutes): `pytest` tests of the Python scripts (`tests/test_*.py`) and Snakemake dry runs with the test configuration, which check that the DAG builds, that alternative runs write to their own directories, and that bad settings are rejected. `snakemake --lint` also runs, as advice only.
+* **Full workflow on test data** (about 15–25 minutes; less when the cached conda environments can be reused): the whole workflow on a small synthetic dataset, three times (default selection, `importance_floor=0.07`, `use_all_predictors=true`), followed by checks on the outputs (`tests/test_outputs.py`) and R tests of the selection code (`tests/test_gf_common.R`). The QC reports and logs are kept as a downloadable artifact of each run.
+
+The test data in `.test/data` are two simulated species on a 4 × 3 degree grid with six environmental layers, built to exercise the edge cases: correlated, constant and noise layers, a site on a NA cell that has to be snapped, a population below `min_ind_per_pop`, VCF IDs that need `id_regex`, an unmapped sample, a multiallelic site, plain and gzipped VCFs. `.test/make_test_data.py` regenerates them. `.test/config/config.yaml` uses small settings and writes to `.test/results`, so test runs never touch real results.
+
+To run the tests yourself, from the repository root:
+
+```bash
+mamba env create -f tests/environment.yaml && mamba activate gfms-test
+pytest tests --ignore=tests/test_outputs.py
+snakemake --use-conda --cores 4 --configfile .test/config/config.yaml
+pytest tests/test_outputs.py
+$(ls .snakemake/conda/*/bin/Rscript | head -1) tests/test_gf_common.R
+```

@@ -1,0 +1,108 @@
+name: tests
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+# a newer push to the same branch cancels the run still in progress
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+defaults:
+  run:
+    # login shell, so the conda environment is active in every step
+    shell: bash -el {0}
+
+jobs:
+  unit:
+    name: Unit tests and dry runs
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: conda-incubator/setup-miniconda@v3
+        with:
+          miniforge-version: latest
+          environment-file: tests/environment.yaml
+          activate-environment: gfms-test
+          conda-remove-defaults: true
+
+      - name: Python unit tests and Snakemake dry runs
+        run: pytest -v tests --ignore=tests/test_outputs.py
+
+      - name: Snakemake lint (advisory)
+        # style suggestions only (e.g. scripts directory used in shell commands); never fails the run
+        continue-on-error: true
+        run: snakemake --lint --configfile .test/config/config.yaml
+
+  workflow:
+    name: Full workflow on test data
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: conda-incubator/setup-miniconda@v3
+        with:
+          miniforge-version: latest
+          environment-file: tests/environment.yaml
+          activate-environment: gfms-test
+          conda-remove-defaults: true
+
+      # the R environment (with gradientForest built from R-Forge) takes several
+      # minutes to create; reuse it while the environment files are unchanged
+      - name: Cache Snakemake conda environments
+        uses: actions/cache@v4
+        with:
+          path: .snakemake/conda
+          key: conda-${{ runner.os }}-${{ hashFiles('workflow/envs/*.yaml', 'workflow/scripts/install_gf.R') }}
+
+      - name: Create conda environments
+        run: snakemake --use-conda --conda-create-envs-only --cores 4 --configfile .test/config/config.yaml
+
+      - name: Run workflow (default predictor selection)
+        run: snakemake --use-conda --cores 4 --configfile .test/config/config.yaml --show-failed-logs
+
+      - name: Run workflow (importance floor)
+        run: >
+          snakemake --use-conda --cores 4 --configfile .test/config/config.yaml --show-failed-logs
+          --config importance_floor=0.07
+
+      - name: Run workflow (all predictors)
+        run: >
+          snakemake --use-conda --cores 4 --configfile .test/config/config.yaml --show-failed-logs
+          --config use_all_predictors=true
+
+      - name: Nothing left to do after a complete run
+        # the rerun triggers used for the real runs; the software-env trigger is left out
+        # because Snakemake records a different environment hash for the first job to use
+        # each conda environment, so it always reports install_gf and study_area as changed
+        run: |
+          snakemake -n --configfile .test/config/config.yaml --rerun-triggers mtime params input code \
+            > dryrun.txt 2>&1 || { cat dryrun.txt; exit 1; }
+          grep -q "Nothing to be done" dryrun.txt || { cat dryrun.txt; exit 1; }
+
+      - name: Check outputs
+        env:
+          GF_TEST_OUTDIRS: .test/results,.test/results_importance_floor0.07,.test/results_all_predictors
+        run: pytest -v tests/test_outputs.py
+
+      - name: R tests (gf_common.R)
+        run: |
+          rscript=$(ls .snakemake/conda/*/bin/Rscript | head -1)
+          "$rscript" tests/test_gf_common.R
+
+      - name: Upload QC reports and logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-results
+          path: |
+            .test/results*/**/qc*.html
+            .test/results*/logs/
+            .snakemake/log/
+          if-no-files-found: ignore
+          retention-days: 14
