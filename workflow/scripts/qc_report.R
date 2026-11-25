@@ -113,6 +113,9 @@ if (identical(nsel$mode[1], "auto") && nrow(tun) > 1) {
 }
 
 summ <- fread(opt$summary)
+# median R² of the SNPs in the model (R² > 0), next to the mean
+summ[, median_rsq := median(snp_p$rsq[snp_p$rsq > 0 & !is.na(snp_p$rsq)])]
+if ("mean_rsq" %in% names(summ)) setcolorder(summ, "median_rsq", after = "mean_rsq")
 pv <- fread(opt$pvals)
 if (pv$n_random[1] < 100) warnings <- c(warnings, sprintf("Only %d randomized fits: p-values are coarse (min %.3g).",
                                                           pv$n_random[1], 1 / (pv$n_random[1] + 1)))
@@ -155,7 +158,9 @@ summary_legend <- legend(
   "<p>The size of the analysis and how well the model fits overall.</p><ul>",
   "<li><b>n_sites</b>: populations used. <b>n_predictors</b>: environmental variables used.</li>",
   "<li><b>n_snps</b>: SNPs given to gradient forest. <b>n_pos_rsq</b>: SNPs that entered the model (R&sup2; &gt; 0). ",
-  "<b>mean_rsq</b> and <b>sum_rsq</b>: average and total R&sup2; of those SNPs.</li>",
+  "<b>mean_rsq</b>, <b>median_rsq</b> and <b>sum_rsq</b>: average, median and total R&sup2; of those SNPs. ",
+  "The mean is pulled down when many weakly associated SNPs enter the model, so read it together with n_pos_rsq; ",
+  "the median is less affected by them. Only the mean is tested against the randomized fits (table below).</li>",
   "<li><b>n_snps_few_unique</b>: SNPs with 5 or fewer distinct allele frequencies across populations; the software ",
   "warns about these but still uses them. <b>n_snps_constant</b>: SNPs with the same frequency everywhere, which can ",
   "never enter the model. <b>n_rf_errors</b> / <b>n_rf_warnings</b>: problems reported while fitting (details in the gf_fit log).</li>",
