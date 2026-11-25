@@ -18,7 +18,7 @@ rule study_area:
     params:
         src=study_area_args(),
     log:
-        f"{OUT}/logs/study_area.log",
+        f"{BASE_OUT}/logs/study_area.log",
     conda:
         "../envs/py_geo.yaml"
     shell:
@@ -40,7 +40,7 @@ rule get_boundaries:
         source=lambda wc: config["env"].get("boundaries") or "none",
         cache=f"{ENV_DIR}/downloads",
     log:
-        f"{OUT}/logs/get_boundaries.log",
+        f"{BASE_OUT}/logs/get_boundaries.log",
     conda:
         "../envs/py_geo.yaml"
     shell:
@@ -64,7 +64,7 @@ rule prep_env_stack:
     resources:
         mem_mb=24000,
     log:
-        f"{OUT}/logs/prep_env_stack.log",
+        f"{BASE_OUT}/logs/prep_env_stack.log",
     conda:
         "../envs/py_geo.yaml"
     shell:
@@ -97,26 +97,3 @@ rule extract_env:
 def predictor_include():
     inc = config["predictors"].get("include", "all")
     return "all" if inc in (None, "all") else ",".join(inc)
-
-
-rule select_predictors:
-    input:
-        sites=sp_dir("env_sites.tsv"),
-        layers=rules.prep_env_stack.output.layers,
-    output:
-        selected=sp_dir("predictors/selected.txt"),
-        report=sp_dir("predictors/report.tsv"),
-        heatmap=sp_dir("predictors/correlation.png"),
-    params:
-        include=predictor_include(),
-        thr=config["predictors"].get("corr_threshold") or "none",
-        keep=",".join(config["predictors"].get("keep_priority") or []) or "none",
-    log:
-        f"{OUT}/logs/{{species}}/select_predictors.log",
-    conda:
-        "../envs/py_geo.yaml"
-    shell:
-        "python {SCRIPTS}/select_predictors.py --env-sites {input.sites} --layers {input.layers} "
-        "--include {params.include} --threshold {params.thr} --keep-priority {params.keep} "
-        "--out-list {output.selected} --out-report {output.report} --out-heatmap {output.heatmap} "
-        "> {log} 2>&1"

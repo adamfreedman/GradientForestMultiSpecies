@@ -5,8 +5,33 @@ import re
 import pandas as pd
 
 SCRIPTS = os.path.join(workflow.basedir, "scripts")
-OUT = config.get("outdir", "results")
-ENV_DIR = f"{OUT}/env"
+def _flag(x):
+    return str(x).strip().lower() in ("true", "1", "yes")
+
+
+# use_all_predictors (run_slurm.sh --use-all-predictors, or --config use_all_predictors=true):
+# no predictor selection; every candidate variable goes into the model. Results then go to
+# <outdir>_all_predictors so they never overwrite a run with selection. The environmental
+# layers and the gradientForest install are shared (always under <outdir>).
+USE_ALL_PREDICTORS = _flag(config.get("use_all_predictors", False))
+# importance_floor (run_slurm.sh --importance-floor 0.01, or --config importance_floor=0.01):
+# drop selected variables whose share of the summed screening importance is below this
+# fraction. Default: no floor. Results then go to <outdir>_importance_floor<value>.
+_floor = config.get("importance_floor")
+IMPORTANCE_FLOOR = None if _floor in (None, "", "none", "null") else float(_floor)
+if IMPORTANCE_FLOOR is not None:
+    if not 0 <= IMPORTANCE_FLOOR < 1:
+        raise ValueError(f"importance_floor must be a fraction in [0, 1), got {_floor!r}")
+    if USE_ALL_PREDICTORS:
+        raise ValueError("importance_floor applies to predictor selection; it cannot be combined with use_all_predictors")
+BASE_OUT = config.get("outdir", "results")
+if USE_ALL_PREDICTORS:
+    OUT = f"{BASE_OUT}_all_predictors"
+elif IMPORTANCE_FLOOR is not None:
+    OUT = f"{BASE_OUT}_importance_floor{IMPORTANCE_FLOOR:g}"
+else:
+    OUT = BASE_OUT
+ENV_DIR = f"{BASE_OUT}/env"
 
 SAMPLES = (
     pd.read_csv(config["samples"], sep="\t", dtype=str, comment="#")
@@ -16,8 +41,12 @@ SAMPLES = (
 for col in ("species", "vcf", "popmap", "latlongs"):
     if col not in SAMPLES.columns:
         raise ValueError(f"sample sheet {config['samples']} is missing column '{col}'")
-if "id_regex" not in SAMPLES.columns:
-    SAMPLES["id_regex"] = ""
+for col in ("id_regex", "min_ind_per_pop"):  # optional columns
+    if col not in SAMPLES.columns:
+        SAMPLES[col] = ""
+bad_n = [s for s, v in SAMPLES.min_ind_per_pop.items() if v and not (v.isdigit() and int(v) >= 1)]
+if bad_n:
+    raise ValueError(f"sample sheet: min_ind_per_pop must be a positive integer (species {bad_n})")
 bad = [s for s in SAMPLES.index if not re.fullmatch(r"[A-Za-z0-9_.-]+", s)]
 if bad:
     raise ValueError(f"species names may only contain letters, digits, '_', '.', '-': {bad}")
@@ -40,11 +69,64 @@ RANDOM_BATCH = max(1, int(config["gf"].get("random_batch_size", 10)))
 N_BATCHES = -(-N_RANDOM // RANDOM_BATCH)  # ceiling
 
 
+def snp_scale(freq):
+    """number of SNP columns in popfreq.tsv / 14,000 (the size the base
+    resources were set for), at least 1"""
+    with open(freq) as fh:
+        n = fh.readline().count("\t")
+    return max(1.0, n / 14000)
+
+
+_PRED = config["predictors"]
+SELECT_THRESHOLD = "none" if USE_ALL_PREDICTORS else (_PRED.get("corr_threshold") or "none")
+# leave-one-population-out predictor selection (diagnostic table in qc.html); only
+# meaningful when variables are selected
+STABILITY_ON = _flag(_PRED.get("stability", True)) and SELECT_THRESHOLD != "none"
+SELECT_RANK_BY = _PRED.get("rank_by", "importance")
+if SELECT_RANK_BY not in ("importance", "accuracy", "correlation"):
+    raise ValueError(f"predictors.rank_by must be importance, accuracy or correlation, got {SELECT_RANK_BY!r}")
+SCREEN_NTREE = int(_PRED.get("screen_ntree", 500))
+SELECT_ARGS = (
+    f"--rank_by={SELECT_RANK_BY} --screen_ntree={SCREEN_NTREE} "
+    f"--keep_priority={','.join(_PRED.get('keep_priority') or []) or 'none'}"
+)
+if IMPORTANCE_FLOOR is not None:
+    if SELECT_THRESHOLD == "none" or SELECT_RANK_BY == "correlation":
+        raise ValueError("importance_floor needs predictors.corr_threshold set and rank_by importance or accuracy")
+    # only added when set, so runs without a floor keep their params (no reruns)
+    SELECT_ARGS += f" --importance_floor={IMPORTANCE_FLOOR:g}"
+
+
 def random_runtime(wc, input):
-    """SLURM minutes for one randomization batch: ~3 min per 100 trees per fit
-    (about 14k SNPs, 14 sites) doubled for margin, times the batch size."""
+    """SLURM minutes for one randomization batch. Measured ~1.1 min per 100 trees
+    per fit for 56k SNPs, 9 predictors and 14 sites; allow 1 min per 100 trees
+    per 10 predictors per 14k SNPs (~3x margin)."""
     ntree = int(pd.read_csv(input.ntree, sep="\t")["ntree"].iloc[0])
-    return 30 + RANDOM_BATCH * math.ceil(6 * ntree / 100)
+    n_pred = sum(1 for l in open(input.preds) if l.strip())
+    per_rep = ntree / 100 * max(1.0, n_pred / 10) * snp_scale(input.freq)
+    return 30 + RANDOM_BATCH * math.ceil(per_rep)
+
+
+def n_populations(sp):
+    """populations in the species' latlongs file: an upper bound on the populations
+    with genotype data, so the number of leave-one-out jobs is known before the
+    genotypes are processed (jobs past the real number write empty tables)"""
+    return len(pd.read_csv(SAMPLES.loc[sp, "latlongs"], dtype=str))
+
+
+def screen_runtime(wc, input):
+    """SLURM minutes for one screening fit with every candidate: measured ~18 min at
+    500 trees, 19 variables, 56k SNPs, 13 sites; ~4x margin"""
+    n_pred = sum(1 for l in open(input.candidates) if l.strip())
+    return 30 + math.ceil(SCREEN_NTREE / 100 * max(1.0, n_pred / 10) * snp_scale(input.freq))
+
+
+def random_mem(wc, input):
+    return math.ceil(16000 * snp_scale(input.freq))
+
+
+def fit_mem(wc, input):
+    return math.ceil(24000 * snp_scale(input.freq))
 
 
 def batch_reps(wc):
@@ -66,6 +148,12 @@ wildcard_constraints:
     # a fitted model: "<species>" (all predictors) or "<species>/<REFIT_DIR>" (significant predictors)
     model=f"({_SP_RE})(/{re.escape(REFIT_DIR)})?",
     batch=r"\d+",
+
+
+def min_ind_per_pop(wc):
+    """per-species value from the sample sheet, else genotypes.min_ind_per_pop"""
+    v = SAMPLES.loc[wc.species, "min_ind_per_pop"]
+    return int(v) if v else int(config["genotypes"]["min_ind_per_pop"])
 
 
 def sample_col(col):
@@ -99,6 +187,7 @@ def model_predictors(wc):
     return f"{OUT}/{sp}/{REFIT_DIR}/predictors.txt" if is_refit(wc) else f"{OUT}/{sp}/predictors/selected.txt"
 
 
+
 def model_label(wc):
     sp = model_species(wc)
     return f"{sp} (significant predictors only)" if is_refit(wc) else sp
@@ -122,6 +211,8 @@ def all_outputs():
         "random_vs_real",
     ]
     out = [f"{OUT}/{sp}/predictors/correlation.png" for sp in SPECIES]
+    if STABILITY_ON:
+        out += [f"{OUT}/{sp}/predictors/stability_variables.tsv" for sp in SPECIES]
     for m in models():
         for p in plots:
             out += [f"{OUT}/{m}/plots/{p}.pdf", f"{OUT}/{m}/plots/{p}.png"]

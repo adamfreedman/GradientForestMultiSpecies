@@ -11,9 +11,9 @@ rule install_gf:
     """One-time install of extendedForest + gradientForest (R-Forge) into the R conda env.
     Runs on the submit host because compute nodes may lack internet access."""
     output:
-        f"{OUT}/.gf_installed",
+        f"{BASE_OUT}/.gf_installed",
     log:
-        f"{OUT}/logs/install_gf.log",
+        f"{BASE_OUT}/logs/install_gf.log",
     conda:
         "../envs/r_gf.yaml"
     shell:
@@ -37,6 +37,88 @@ NTREE_ARGS = f"--ntree={GF.get('ntree', 'auto')}" + (
 )
 
 
+rule select_predictors:
+    """Candidate variables, and which of each correlated set to keep (see predictors in config.yaml)."""
+    input:
+        gf_ok=rules.install_gf.output,
+        sites=sp_dir("env_sites.tsv"),
+        freq=sp_dir("genotypes/popfreq.tsv"),
+        layers=rules.prep_env_stack.output.layers,
+    output:
+        selected=sp_dir("predictors/selected.txt"),
+        candidates=sp_dir("predictors/candidates.txt"),
+        report=sp_dir("predictors/report.tsv"),
+        heatmap=sp_dir("predictors/correlation.png"),
+    params:
+        include=predictor_include(),
+        thr=SELECT_THRESHOLD,
+        select=SELECT_ARGS,
+        args=GF_ARGS,
+    resources:
+        mem_mb=fit_mem,
+        runtime=240,
+    log:
+        f"{OUT}/logs/{{species}}/select_predictors.log",
+    conda:
+        "../envs/r_gf.yaml"
+    shell:
+        "Rscript {SCRIPTS}/select_predictors.R --env_sites={input.sites} --popfreq={input.freq} "
+        "--layers={input.layers} --include={params.include} --threshold={params.thr} {params.select} "
+        "{params.args} --out_list={output.selected} --out_candidates={output.candidates} "
+        "--out_report={output.report} --out_heatmap={output.heatmap} > {log} 2>&1"
+
+
+rule screen_leave_one_out:
+    """Predictor selection repeated with population number {k} left out (diagnostic)."""
+    input:
+        gf_ok=rules.install_gf.output,
+        sites=sp_dir("env_sites.tsv"),
+        freq=sp_dir("genotypes/popfreq.tsv"),
+        candidates=sp_dir("predictors/candidates.txt"),
+    output:
+        sp_dir("predictors/leave_one_out/site{k}.tsv"),
+    wildcard_constraints:
+        k=r"\d+",
+    params:
+        thr=SELECT_THRESHOLD,
+        select=SELECT_ARGS,
+        args=GF_ARGS,
+    resources:
+        mem_mb=fit_mem,
+        runtime=screen_runtime,
+    log:
+        f"{OUT}/logs/{{species}}/screen_leave_one_out/site{{k}}.log",
+    conda:
+        "../envs/r_gf.yaml"
+    shell:
+        "Rscript {SCRIPTS}/screen_leave_one_out.R --env_sites={input.sites} --popfreq={input.freq} "
+        "--candidates={input.candidates} --threshold={params.thr} {params.select} {params.args} "
+        "--k={wildcards.k} --out={output} > {log} 2>&1"
+
+
+rule predictor_stability:
+    """How often each variable is selected when one population is left out."""
+    input:
+        loo=lambda wc: [
+            f"{OUT}/{wc.species}/predictors/leave_one_out/site{k}.tsv" for k in range(1, n_populations(wc.species) + 1)
+        ],
+        selected=sp_dir("predictors/selected.txt"),
+        report=sp_dir("predictors/report.tsv"),
+    output:
+        variables=sp_dir("predictors/stability_variables.tsv"),
+        sites=sp_dir("predictors/stability_sites.tsv"),
+    resources:
+        mem_mb=2000,
+        runtime=15,
+    log:
+        f"{OUT}/logs/{{species}}/predictor_stability.log",
+    conda:
+        "../envs/r_gf.yaml"
+    shell:
+        "Rscript {SCRIPTS}/predictor_stability.R --selected={input.selected} --report={input.report} "
+        "--out_variables={output.variables} --out_sites={output.sites} {input.loo} > {log} 2>&1"
+
+
 rule gf_fit:
     input:
         gf_ok=rules.install_gf.output,
@@ -55,7 +137,7 @@ rule gf_fit:
         args=GF_ARGS,
         ntree=NTREE_ARGS,
     resources:
-        mem_mb=24000,
+        mem_mb=fit_mem,
         runtime=2880,  # adaptive ntree may fit up to ~2x tune_max trees in total
     log:
         f"{OUT}/logs/{{model}}/gf_fit.log",
@@ -84,7 +166,7 @@ rule gf_randomize:
         first=lambda wc: batch_reps(wc)[0],
         last=lambda wc: batch_reps(wc)[1],
     resources:
-        mem_mb=16000,
+        mem_mb=random_mem,
         runtime=random_runtime,
     log:
         f"{OUT}/logs/{{model}}/gf_random/batch{{batch}}.log",

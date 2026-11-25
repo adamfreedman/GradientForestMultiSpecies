@@ -118,7 +118,11 @@ fwrite(imp, opt$out_importance, sep = "\t")
 
 fwrite(data.table(snp = names(gf$result), rsq = gf$result)[order(-rsq)], opt$out_rsq, sep = "\t")
 
+inp <- attr(gf, "input")
+cnt <- snp_input_counts(d$Y)
 summ <- data.table(n_sites = nrow(d$X), n_predictors = ncol(d$X), n_snps = ncol(d$Y),
+                   n_snps_few_unique = cnt$n_few_unique, n_snps_constant = cnt$n_constant,
+                   n_rf_errors = inp$n_errors, n_rf_warnings = sum(inp$warnings),
                    n_pos_rsq = st$n_pos_rsq, mean_rsq = st$mean_rsq, sum_rsq = st$sum_rsq,
                    ntree = ntree, ntree_mode = if (auto) "auto" else "fixed", ntree_converged = converged,
                    maxLevel = attr(gf, "maxLevel"), corr_threshold = as.numeric(opt$corr_threshold))

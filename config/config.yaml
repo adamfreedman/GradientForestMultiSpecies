@@ -12,6 +12,8 @@
 #   latlongs  CSV with header: popid,sitename,lat,long
 #   id_regex  optional column; regex removed from VCF sample IDs before matching popmap
 #             (e.g. ^MCZA_). Leave the column out if the IDs already match.
+#   min_ind_per_pop  optional column; minimum individuals for a population to be kept
+#             for this species (overrides genotypes.min_ind_per_pop; blank = default)
 samples: config/samples.tsv
 
 outdir: results
@@ -40,13 +42,35 @@ env:
 
 predictors:
   include: all            # "all" or a list such as [bio1, bio2, bio12]
-  corr_threshold: 0.8     # prune pairs with |Pearson r| above this at the sites; null = no pruning
-  keep_priority: []       # variables never dropped by pruning if avoidable
+  # Of two variables with |Pearson r| above corr_threshold at the sites, keep only
+  # the one ranked higher; no two kept variables are correlated above it. null = keep all.
+  corr_threshold: 0.8
+  # How variables are ranked:
+  #   importance  - R^2-weighted importance in a screening gradient forest fitted with
+  #                 all candidate variables (the one that fits the SNPs better is kept)
+  #   accuracy    - the same, using accuracy importance
+  #   correlation - least correlated with the other variables first (ignores the SNPs)
+  # The randomized fits use the selected variables, so tests are conditional on this model.
+  rank_by: importance
+  screen_ntree: 500       # trees in the screening fit
+  keep_priority: []       # variables ranked first, so kept unless correlated with each other
+  # Diagnostic: repeat the selection once per population, leaving that population out,
+  # and report in qc.html how often each variable is kept (sensitivity of the choice to
+  # the sampled populations). Costs one screening fit per population. The model always
+  # uses the full-data selection.
+  stability: true
+  # To skip selection and use every candidate variable: sbatch run_slurm.sh --use-all-predictors
+  # (or snakemake ... --config use_all_predictors=true); results go to <outdir>_all_predictors.
+  # Importance floor (default: none): after selection, also drop variables whose share of
+  # the summed screening importance is below a fraction, e.g. 1%:
+  #   sbatch run_slurm.sh --importance-floor 0.01   (or --config importance_floor=0.01)
+  # Results go to <outdir>_importance_floor0.01. Not combinable with --use-all-predictors.
 
 genotypes:
-  min_ind_per_pop: 5          # populations with fewer genotyped individuals are dropped
-  max_missing_per_pop: 0.5    # drop SNP if the missing-genotype fraction exceeds this in any population
-  min_maf: 0.05               # global minor allele frequency
+  min_ind_per_pop: 5          # populations with fewer genotyped individuals are dropped;
+                              # default for species with no min_ind_per_pop in the sample sheet
+  # no MAF or missingness filters: gradient forest leaves out SNPs without signal
+  # (R^2 <= 0), and only SNPs in the model are tested
 
 gf:
   # number of trees per forest, used for the observed fit and every randomized fit.

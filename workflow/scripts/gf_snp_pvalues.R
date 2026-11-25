@@ -3,8 +3,10 @@
 # permuted) gives a SNP an R^2 at least as large as in the observed model.
 #   p = (1 + no. randomized fits with R^2 >= observed) / (n_random + 1)
 # gradientForest only reports SNPs with R^2 > 0, so a SNP absent from a fit has
-# R^2 = 0 there. SNPs with observed R^2 = 0 get p = 1. All SNPs in popfreq.tsv
-# are tested, and p_bh is the Benjamini-Hochberg adjustment across all of them.
+# R^2 = 0 there. Only SNPs in the observed model (R^2 > 0) are tested: the null
+# is that their environmental association is no stronger than in randomized
+# data. p_bh is the Benjamini-Hochberg adjustment across those SNPs. SNPs with
+# observed R^2 <= 0 are kept in the table with NA p-values.
 # CHROM, POS and VCF_ID come from genotypes/snp_info.tsv.
 this_dir <- dirname(sub("^--file=", "", grep("^--file=", commandArgs(FALSE), value = TRUE)))
 source(file.path(this_dir, "gf_common.R"))
@@ -28,19 +30,19 @@ m <- res[rsq > 0][nl, on = "snp", nomatch = NULL]
 cnt <- m[i.rsq >= rsq, .N, by = snp]
 res[, n_null_ge := 0L]
 res[cnt, n_null_ge := i.N, on = "snp"]
-res[rsq <= 0, n_null_ge := n_rand]
+res[rsq <= 0, n_null_ge := NA_integer_]
 res[, n_random := n_rand]
 res[, p_empirical := (1 + n_null_ge) / (1 + n_rand)]
-res[, p_bh := p.adjust(p_empirical, method = "BH")]
+res[, p_bh := p.adjust(p_empirical, method = "BH")]  # NAs are left out of the adjustment
 info <- fread(opt$snp_info, colClasses = list(character = c("snp", "CHROM", "VCF_ID")))
 if (!all(res$snp %in% info$snp)) stop("snp_info.tsv is missing SNPs that are in popfreq.tsv")
 res <- info[res, on = "snp"]
 setcolorder(res, c("snp", "CHROM", "POS", "VCF_ID"))
-setorder(res, p_empirical, -rsq)
-fwrite(res, opt$out, sep = "\t")
+setorderv(res, c("p_empirical", "rsq"), order = c(1L, -1L), na.last = TRUE)
+fwrite(res, opt$out, sep = "\t", na = "NA")
 
-message(sprintf("%d SNPs tested (%d with observed R^2 > 0), %d randomized fits; smallest possible p = %.3g",
+message(sprintf("%d SNPs in popfreq, %d tested (observed R^2 > 0), %d randomized fits; smallest possible p = %.3g",
                 nrow(res), sum(res$rsq > 0), n_rand, 1 / (n_rand + 1)))
 for (a in c(0.01, 0.05, 0.1))
   message(sprintf("alpha %.2f: %d SNPs with p <= alpha, %d with BH-adjusted p <= alpha",
-                  a, sum(res$p_empirical <= a), sum(res$p_bh <= a)))
+                  a, sum(res$p_empirical <= a, na.rm = TRUE), sum(res$p_bh <= a, na.rm = TRUE)))
