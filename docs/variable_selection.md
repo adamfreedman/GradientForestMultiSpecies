@@ -26,6 +26,33 @@ group to keep**.
 
 ## 2. Methods compared
 
+The letters A–D label the four ways of choosing predictors, and every table
+below uses them. In brief:
+
+- **A. Correlation pruning.** The original method, in an earlier version of the
+  workflow. It removes correlated variables using the environmental data alone
+  and never looks at the SNPs. It is no longer available in the workflow; it is
+  reported here as the baseline.
+- **B. Fit-based selection.** The current default. It first fits a gradient
+  forest with all 19 variables, then keeps the more important member of each
+  correlated group. Output: `results/`.
+- **C. All predictors.** No selection: all 19 variables go into the model.
+  Output: `results_all_predictors/` (run with `--use-all-predictors`).
+- **D. Fit-based selection with an importance floor.** Method B, then also drop
+  variables that contribute almost nothing (under 1% of total importance in
+  the screening fit). Output: `results_importance_floor0.01/` (run with
+  `--importance-floor 0.01`).
+
+Two further analyses are not selection methods but are reported alongside them:
+
+- the **refit**, which refits the model after A, B, C or D using only the
+  variables that came out significant;
+- the **leave-one-population-out (LOO) check**, which repeats the selection
+  (B, or D when a floor is set) with each population dropped in turn to see
+  how stable the choice is.
+
+In more detail:
+
 | Method | How a variable is chosen within each correlated group | Status |
 |---|---|---|
 | A. Correlation pruning (original) | In each pair with \|r\| > 0.8, drop the variable with the higher mean \|r\| to the remaining candidates; repeat until no pair exceeds 0.8. Uses only the environment, not the genetic data. | Replaced |
