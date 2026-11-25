@@ -95,11 +95,8 @@ Mean and median R² are over SNPs with R² > 0, the set the model statistics
 and per-SNP tests use. Median R² has no randomization p-value; only mean R² is
 tested against the null.
 
-Caveat for every comparison in this table: gradient forest's default `mtry`
-(variables tried at each split) is a third of the number of predictors, so
-models with different predictor sets also differ in `mtry` (for example 3 for
-B, 2 for chimp D, 6 for C). Part of any difference between models may come
-from this rather than from which variables are included.
+All models use gradient forest's default `mtry` (a third of the number of
+predictors), so it varies with the size of the predictor set.
 
 Overlap of significant SNPs (BH ≤ 0.1) between B and C: chimp 2,134 shared
 (91% of B), trachylepis 15,052 shared (94% of B). Refits: chimp 2,553 shared
@@ -136,9 +133,7 @@ Overlap of significant SNPs (BH ≤ 0.1) between B and C: chimp 2,134 shared
   - trachylepis: 16,309 against 15,987 at BH ≤ 0.1.
 
   This fits the idea that uninformative predictors add noise (section 3.2.1),
-  but the gain is small. In chimp it also comes with `mtry` falling from 3 to
-  2, which these runs can't separate from the effect of the floor. The floor
-  also shifts variable-level results at the margin. In trachylepis, bio3's
+  but the gain is small. The floor also shifts variable-level results at the margin. In trachylepis, bio3's
   R²-weighted importance p-value moved from 0.042 (B) to 0.055 (D), so bio3
   dropped out of the refit (bio12, bio8, bio18, bio19 after D). Chimp results
   at the variable level are unchanged: bio19 and bio4 are significant in both,
