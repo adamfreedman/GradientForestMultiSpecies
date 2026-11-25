@@ -258,6 +258,20 @@ predictors_legend <- legend(
        "in config.yaml; with <code>rank_by: correlation</code> the ranking ignores the genetic data (least correlated ",
        "with the others first)."))
 
+# optional parts of the predictor legend: share column (newer report.tsv) and importance floor
+if ("screen_share" %in% names(preds))
+  predictors_legend <- paste0(predictors_legend, legend(
+    "<p><b>screen_share</b>: the variable's share of the summed screening importance of all variables ",
+    "(0.05 = 5% of the explained genetic variation).</p>"))
+if (!is.null(opt$importance_floor) && !opt$importance_floor %in% c("", "none")) {
+  fl <- as.numeric(opt$importance_floor)
+  predictors_legend <- paste0(predictors_legend, legend(sprintf(paste0(
+    "<p><b>Importance floor: %g%%</b> (<code>--importance-floor %g</code>). Variables whose screen_share is below ",
+    "%g%% were dropped even if not correlated with a kept variable, so that variables explaining almost none of ",
+    "the genetic variation do not add noise to the model and the randomization tests (reason column).</p>"),
+    100 * fl, fl, 100 * fl)))
+}
+
 no_selection_legend <- legend(
   "<p><b>Variable selection was turned off</b> (<code>--use-all-predictors</code>, or ",
   "<code>predictors.corr_threshold: null</code>): every candidate variable that varies across the sampled sites is ",

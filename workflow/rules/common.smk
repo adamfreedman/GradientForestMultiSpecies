@@ -14,8 +14,23 @@ def _flag(x):
 # <outdir>_all_predictors so they never overwrite a run with selection. The environmental
 # layers and the gradientForest install are shared (always under <outdir>).
 USE_ALL_PREDICTORS = _flag(config.get("use_all_predictors", False))
+# importance_floor (run_slurm.sh --importance-floor 0.01, or --config importance_floor=0.01):
+# drop selected variables whose share of the summed screening importance is below this
+# fraction. Default: no floor. Results then go to <outdir>_importance_floor<value>.
+_floor = config.get("importance_floor")
+IMPORTANCE_FLOOR = None if _floor in (None, "", "none", "null") else float(_floor)
+if IMPORTANCE_FLOOR is not None:
+    if not 0 <= IMPORTANCE_FLOOR < 1:
+        raise ValueError(f"importance_floor must be a fraction in [0, 1), got {_floor!r}")
+    if USE_ALL_PREDICTORS:
+        raise ValueError("importance_floor applies to predictor selection; it cannot be combined with use_all_predictors")
 BASE_OUT = config.get("outdir", "results")
-OUT = f"{BASE_OUT}_all_predictors" if USE_ALL_PREDICTORS else BASE_OUT
+if USE_ALL_PREDICTORS:
+    OUT = f"{BASE_OUT}_all_predictors"
+elif IMPORTANCE_FLOOR is not None:
+    OUT = f"{BASE_OUT}_importance_floor{IMPORTANCE_FLOOR:g}"
+else:
+    OUT = BASE_OUT
 ENV_DIR = f"{BASE_OUT}/env"
 
 SAMPLES = (
@@ -75,6 +90,11 @@ SELECT_ARGS = (
     f"--rank_by={SELECT_RANK_BY} --screen_ntree={SCREEN_NTREE} "
     f"--keep_priority={','.join(_PRED.get('keep_priority') or []) or 'none'}"
 )
+if IMPORTANCE_FLOOR is not None:
+    if SELECT_THRESHOLD == "none" or SELECT_RANK_BY == "correlation":
+        raise ValueError("importance_floor needs predictors.corr_threshold set and rank_by importance or accuracy")
+    # only added when set, so runs without a floor keep their params (no reruns)
+    SELECT_ARGS += f" --importance_floor={IMPORTANCE_FLOOR:g}"
 
 
 def random_runtime(wc, input):

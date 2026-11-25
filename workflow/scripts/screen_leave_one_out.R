@@ -14,6 +14,7 @@ need(opt, c("env_sites", "popfreq", "candidates", "threshold", "rank_by", "keep_
 threshold <- if (opt$threshold == "none") NA_real_ else as.numeric(opt$threshold)
 keep <- if (opt$keep_priority == "none") character(0) else strsplit(opt$keep_priority, ",")[[1]]
 k <- as.integer(opt$k)
+floor <- parse_floor(opt, opt$rank_by)
 
 empty <- data.table(left_out = character(0), sitename = character(0), variable = character(0),
                     score = numeric(0), rank = integer(0), kept = logical(0),
@@ -34,7 +35,7 @@ message(sprintf("leaving out population %s (%s): %d sites, %d candidates%s", lef
                 nrow(X), ncol(X), if (length(const)) paste0("; constant without it: ", paste(const, collapse = ", ")) else ""))
 
 set.seed(as.integer(opt$seed) + k)
-sel <- select_predictors(X, Y, opt, threshold, opt$rank_by, intersect(keep, names(X)))
+sel <- select_predictors(X, Y, opt, threshold, opt$rank_by, intersect(keep, names(X)), floor)
 
 # for every variable, the most correlated kept variable (other than itself):
 # for a variable dropped here, the one that stood in for it

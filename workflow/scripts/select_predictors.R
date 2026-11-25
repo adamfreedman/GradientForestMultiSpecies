@@ -18,6 +18,8 @@ if (!opt$rank_by %in% c("importance", "accuracy", "correlation"))
   stop("rank_by must be importance, accuracy or correlation, got ", opt$rank_by)
 threshold <- if (opt$threshold == "none") NA_real_ else as.numeric(opt$threshold)
 keep <- if (opt$keep_priority == "none") character(0) else strsplit(opt$keep_priority, ",")[[1]]
+floor <- parse_floor(opt, opt$rank_by)
+if (!is.na(floor) && is.na(threshold)) stop("importance_floor needs predictor selection (a corr_threshold)")
 
 layers <- trimws(readLines(opt$layers))
 layers <- layers[nzchar(layers)]
@@ -34,7 +36,7 @@ writeLines(cand, opt$out_candidates)
 X <- d$X[, cand, drop = FALSE]
 
 set.seed(as.integer(opt$seed))
-sel <- select_predictors(X, d$Y, opt, threshold, opt$rank_by, keep)
+sel <- select_predictors(X, d$Y, opt, threshold, opt$rank_by, keep, floor)
 
 score_col <- switch(opt$rank_by, importance = "screen_importance", accuracy = "screen_accuracy",
                     correlation = "screen_score")
@@ -42,17 +44,19 @@ rep <- data.table(variable = cand,
                   status = ifelse(cand %in% sel$selected, "kept", "dropped"),
                   rank = sel$rank[cand],
                   score = signif(sel$score[cand], 4),
+                  screen_share = round(sel$share[cand], 4),
                   mean_abs_r = round(sel$mean_abs_r[cand], 3),
                   reason = sel$reason[cand])
 setnames(rep, "score", score_col)
-if (opt$rank_by == "correlation") rep[, (score_col) := NULL]
+if (opt$rank_by == "correlation") rep[, c(score_col, "screen_share") := NULL]
 setorder(rep, rank)
 if (length(const)) rep <- rbind(rep, data.table(variable = const, status = "dropped",
                                                 reason = "constant across sites"), fill = TRUE)
 fwrite(rep, opt$out_report, sep = "\t", na = "NA", quote = FALSE)
 writeLines(sel$selected, opt$out_list)
-message(sprintf("%d sites; kept %d of %d predictors (rank_by = %s, threshold = %s)",
-                nrow(X), length(sel$selected), length(vars), opt$rank_by, opt$threshold))
+message(sprintf("%d sites; kept %d of %d predictors (rank_by = %s, threshold = %s, importance_floor = %s)",
+                nrow(X), length(sel$selected), length(vars), opt$rank_by, opt$threshold,
+                if (is.na(floor)) "none" else floor))
 print(rep)
 
 # correlation heatmap of the candidates; kept variables in bold black

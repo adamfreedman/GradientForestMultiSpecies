@@ -81,7 +81,9 @@ rule qc_report:
         stability=lambda wc, input: (
             f"--stability_vars={input.stability[0]} --stability_sites={input.stability[1]}" if input.stability else ""
         ),
-        selection="--selection=none" if SELECT_THRESHOLD == "none" else "",
+        selection="--selection=none" if SELECT_THRESHOLD == "none" else (
+            f"--importance_floor={IMPORTANCE_FLOOR:g}" if IMPORTANCE_FLOOR is not None else ""
+        ),
         thr=lambda wc: (
             f"--min_snp_rsq_cor={_TUNE.get('min_snp_rsq_cor', 0.98)} "
             f"--max_importance_change={_TUNE.get('max_importance_change', 0.05)} "

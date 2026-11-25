@@ -61,6 +61,10 @@ predictors:
   stability: true
   # To skip selection and use every candidate variable: sbatch run_slurm.sh --use-all-predictors
   # (or snakemake ... --config use_all_predictors=true); results go to <outdir>_all_predictors.
+  # Importance floor (default: none): after selection, also drop variables whose share of
+  # the summed screening importance is below a fraction, e.g. 1%:
+  #   sbatch run_slurm.sh --importance-floor 0.01   (or --config importance_floor=0.01)
+  # Results go to <outdir>_importance_floor0.01. Not combinable with --use-all-predictors.
 
 genotypes:
   min_ind_per_pop: 5          # populations with fewer genotyped individuals are dropped;

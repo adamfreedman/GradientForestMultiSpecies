@@ -31,7 +31,8 @@ group to keep**.
 | A. Correlation pruning (original) | In each pair with \|r\| > 0.8, drop the variable with the higher mean \|r\| to the remaining candidates; repeat until no pair exceeds 0.8. Uses only the environment, not the genetic data. | Replaced |
 | B. Fit-based selection | Fit a screening GF with every candidate variable. Rank variables by R²-weighted importance. Go down the ranking and keep a variable unless it has \|r\| > 0.8 with one already kept. Uses the genetic data. | **Current default** |
 | C. All predictors | No selection; all 19 variables. | Optional (`--use-all-predictors`) |
-| Refit on significant variables | After any of A–C, refit using only variables whose importance or accuracy beats the randomization null (p ≤ 0.05). | Produced alongside the main model as a secondary analysis |
+| D. Fit-based + importance floor | As B, then also drop any variable whose share of the summed screening importance is below a floor (here 1%), i.e. variables kept only because nothing correlates with them. | Optional (`--importance-floor 0.01`); default is no floor |
+| Refit on significant variables | After any of A–D, refit using only variables whose importance or accuracy beats the randomization null (p ≤ 0.05). | Produced alongside the main model as a secondary analysis |
 | Leave-one-population-out (LOO) selection | Repeat B with each population left out in turn. Considered as a possible replacement for B; adopted as a diagnostic. | **Diagnostic in QC report** |
 
 **Why B over A, in one sentence:** method A picks among near-equivalent
@@ -48,17 +49,25 @@ whether B's choice is reliable and whether it matters for the results.
 |---|---|---|
 | A. Correlation pruning | bio2 bio3 bio4 bio6 bio10 bio15 bio18 bio19 (8) | bio3 bio4 bio5 bio8 bio9 bio14 bio15 bio18 bio19 (9) |
 | B. Fit-based | bio2 bio3 bio4 bio5 bio6 bio8 bio15 bio18 bio19 (9) | bio3 bio4 bio5 bio8 bio9 bio12 bio14 bio15 bio18 bio19 (10) |
+| D. Fit-based + 1% floor | bio2 bio3 bio4 bio5 bio6 bio8 bio15 bio19 (8; B without bio18) | bio3 bio4 bio8 bio9 bio12 bio14 bio15 bio18 bio19 (9; B without bio5) |
 | Refit after A | bio19 bio4 | bio8 bio18 bio19 bio3 |
 | Refit after B | bio19 bio4 | bio12 bio8 bio18 bio19 bio3 |
 | Refit after C | bio19 bio4 bio16 | bio18 bio12 bio6 bio8 bio2 bio7 bio13 bio3 bio19 bio16 |
+| Refit after D | bio19 bio4 | bio12 bio8 bio18 bio19 |
 
-The two methods differ by only one or two variables:
+Methods A and B differ by only one or two variables:
 
 - **Chimp:** B swapped bio10 for bio5 and bio8. All three are low-importance
   temperature variables.
 - **Trachylepis:** B added bio12 (annual precipitation), which ranks 3rd of 19
   in the screening fit. Method A had dropped it because it is correlated with
   many other variables.
+- **D vs B:** the 1% floor removes only the one variable in each species that
+  was kept although it explains almost nothing: chimp bio18 (0.85% of the
+  summed screening importance, rank 19 of 19) and trachylepis bio5 (0.11%, rank
+  19). The next-weakest kept variables have shares of 1.6% (chimp bio8) and
+  1.4% (trachylepis bio14), so a 1% floor isn't close to the shares of any other
+  kept variable.
 
 ### 3.2 Model fit and SNP counts
 
@@ -69,22 +78,33 @@ The two methods differ by only one or two variables:
 | B. Fit-based | 2,675 (805; 0.015) | 0.246 (0.007) | 0.212 | 919 | 2,355 |
 | C. All predictors | 2,618 (784; 0.014) | 0.245 (0.012) | 0.209 | 785 | 2,363 |
 | Refit after A or B (bio19, bio4) | 2,904 (764; 0.007) | 0.284 (0.005) | 0.243 | 1,401 | 2,714 |
+| D. Fit-based + 1% floor | 2,732 (808; 0.013) | 0.245 (0.005) | 0.213 | 997 | 2,405 |
 | Refit after C (bio19, bio4, bio16) | 2,868 (730; 0.009) | 0.287 (0.005) | 0.246 | 1,490 | 2,761 |
+| Refit after D (bio19, bio4; same as after B) | 2,904 (764; 0.007) | 0.284 (0.005) | 0.243 | 1,401 | 2,714 |
 | **Trachylepis** | | | | | |
 | A. Correlation pruning | 15,701 (2,382; 0.001) | 0.436 (0.001) | 0.474 | 13,939 | 15,537 |
 | B. Fit-based | 16,234 (2,431; 0.001) | 0.438 (0.002) | 0.476 | 14,280 | 15,987 |
 | C. All predictors | 15,702 (2,318; 0.001) | 0.460 (0.002) | 0.494 | 13,644 | 15,517 |
 | Refit after A | 15,365 (1,971; 0.001) | 0.492 (0.001) | 0.568 | 13,971 | 15,318 |
 | Refit after B | 16,071 (2,069; 0.001) | 0.482 (0.001) | 0.548 | 14,293 | 16,017 |
+| D. Fit-based + 1% floor | 16,469 (2,358; 0.001) | 0.459 (0.001) | 0.496 | 14,561 | 16,309 |
 | Refit after C | 15,659 (2,183; 0.001) | 0.529 (0.002) | 0.575 | 14,394 | 15,590 |
+| Refit after D | 15,805 (1,973; 0.001) | 0.509 (0.002) | 0.561 | 14,567 | 15,773 |
 
 Mean and median R² are over SNPs with R² > 0, the set the model statistics
 and per-SNP tests use. Median R² has no randomization p-value; only mean R² is
 tested against the null.
 
+Caveat for every comparison in this table: gradient forest's default `mtry`
+(variables tried at each split) is a third of the number of predictors, so
+models with different predictor sets also differ in `mtry` (for example 3 for
+B, 2 for chimp D, 6 for C). Part of any difference between models may come
+from this rather than from which variables are included.
+
 Overlap of significant SNPs (BH ≤ 0.1) between B and C: chimp 2,134 shared
 (91% of B), trachylepis 15,052 shared (94% of B). Refits: chimp 2,553 shared
-(94%), trachylepis 14,760 shared (92%).
+(94%), trachylepis 14,760 shared (92%). Between B and D: chimp 2,228 shared
+(95% of B), trachylepis 15,764 shared (99% of B).
 
 **Interpretation**
 
@@ -109,6 +129,20 @@ Overlap of significant SNPs (BH ≤ 0.1) between B and C: chimp 2,134 shared
   (r = 0.98 with bio19) joins bio19; in trachylepis, 10 of 19 variables pass,
   against 5 after selection. **Selection matters for interpreting individual
   variables, not for which SNPs are detected.**
+- **Importance floor (D):** removing the one near-zero variable slightly
+  *increased* detection in both species, by about 2% at BH ≤ 0.1:
+  - chimp: 2,405 against 2,355 SNPs at BH ≤ 0.1, and 997 against 919 at
+    BH ≤ 0.05;
+  - trachylepis: 16,309 against 15,987 at BH ≤ 0.1.
+
+  This fits the idea that uninformative predictors add noise (section 3.2.1),
+  but the gain is small. In chimp it also comes with `mtry` falling from 3 to
+  2, which these runs can't separate from the effect of the floor. The floor
+  also shifts variable-level results at the margin. In trachylepis, bio3's
+  R²-weighted importance p-value moved from 0.042 (B) to 0.055 (D), so bio3
+  dropped out of the refit (bio12, bio8, bio18, bio19 after D). Chimp results
+  at the variable level are unchanged: bio19 and bio4 are significant in both,
+  and the refits are identical.
 
 ### 3.2.1 Why the all-predictor model has a higher mean R² in trachylepis
 
@@ -205,6 +239,11 @@ recomputed among the remaining sites.
     represented.
 - One population can noticeably change the model: leaving out Batanga raised
   chimp SNPs with R² > 0 from ~2,600 to 3,306.
+- **With the 1% floor (D)**, the leave-one-out results are nearly the same:
+  the full-data set is reproduced in 7 of 16 (chimp) and 2 of 14
+  (trachylepis) fits, as without the floor. Chimp bio18 passes the floor in 4
+  of the 16 leave-one-out fits (25%), so the floor decision for that variable
+  also depends a little on the sampled populations.
 - **Using LOO to choose variables was considered and rejected.** Ranking
   variables by how often they are kept, or by their average importance across
   the leave-one-out fits, reproduced exactly the sets chosen by method B, so
@@ -243,15 +282,25 @@ result and report the refit as a secondary analysis.
    always done.
 4. **Secondary: refit on significant variables**, kept as a separate model and
    report (`refit_sigvars/`), not the primary result.
+5. **Option: `--importance-floor <fraction>`** (method D; default no floor)
+   also drops kept variables whose share of the summed screening importance is
+   below the given fraction. Results go to `<outdir>_importance_floor<value>`.
+   Variables in `keep_priority` are exempt, and the leave-one-out diagnostic
+   applies the same floor. It can't be combined with `--use-all-predictors`.
 
-## 5. Known limitation, not addressed
+## 5. Variables kept only because nothing correlates with them
 
 The correlation rule keeps any variable that is not correlated with a
 higher-ranked one, however unimportant. Some kept variables explain almost
-nothing: trachylepis bio5 (importance 0.0005, rank 19 of 19) and chimp bio18
-(rank 19). Weak predictors slightly raise the randomization null (section 3.2).
-A minimum-importance threshold would remove them, but it is not implemented
-because no principled cut-off has been settled on.
+nothing: trachylepis bio5 (0.11% of the summed screening importance, rank 19 of
+19) and chimp bio18 (0.85%, rank 19). The optional importance floor (method D)
+removes such variables. A 1% floor removes exactly these two and slightly
+increases the number of significant SNPs (section 3.2). It is not the default
+for two reasons. No cut-off follows from first principles; the 1% value was
+chosen because it separates these two variables from all others in both
+species, and other datasets may need a different value. Removing a variable is
+also a choice the analyst should make knowingly, not one made silently by
+default.
 
 ## 6. Draft narrative for a methods section
 
@@ -276,4 +325,9 @@ because no principled cut-off has been settled on.
 > predictors. The selected predictor set also detected more SNPs with weak but
 > significant associations than the full set (946 vs. 414 SNPs with R² > 0
 > unique to each model in *T. affinis*), while the SNPs detected by both
-> models fit equally well (median R² 0.504 vs. 0.505).
+> models fit equally well (median R² 0.504 vs. 0.505). Additionally dropping
+> retained variables that accounted for less than 1% of the summed screening
+> importance (one variable per species) increased the number of significant
+> SNPs by about 2% and left the significant predictors unchanged, except that
+> one marginal predictor (bio3 in *T. affinis*, p = 0.042) fell just above
+> p = 0.05.

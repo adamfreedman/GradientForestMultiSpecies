@@ -112,7 +112,12 @@ gf_stats <- function(gf, preds) {
 #     variable that fits the allele frequencies better is kept;
 #   correlation: lowest mean |r| with the other candidates first (ignores the SNPs).
 # keep_priority variables are ranked first. threshold NA = keep every candidate.
-select_predictors <- function(X, Y, opt, threshold, rank_by, keep_priority = character(0)) {
+# importance_floor (rank_by importance/accuracy only; NA = none): a variable whose
+# share of the summed screening score (its score / sum of all positive scores)
+# is below the floor is dropped, unless it is in keep_priority. Because variables
+# are taken in rank order, a variable below the floor never excludes another.
+select_predictors <- function(X, Y, opt, threshold, rank_by, keep_priority = character(0),
+                              importance_floor = NA_real_) {
   v <- colnames(X)
   r <- abs(cor(X))
   diag(r) <- 0
@@ -134,11 +139,15 @@ select_predictors <- function(X, Y, opt, threshold, rank_by, keep_priority = cha
       invisible(gc())
     }
   }
+  share <- if (all(is.na(score))) score else score / sum(pmax(score, 0), na.rm = TRUE)
+  floor_on <- !is.na(importance_floor) && !all(is.na(score))
   ord <- if (all(is.na(score))) seq_along(v) else order(!(v %in% keep_priority), -score, seq_along(v))
   kept <- character(0)
   reason <- setNames(rep("", length(v)), v)
   for (x in v[ord]) {
-    if (is.na(threshold) || !length(kept) || max(r[x, kept]) <= threshold) {
+    if (floor_on && !(x %in% keep_priority) && share[x] < importance_floor) {
+      reason[x] <- sprintf("share %.1f%% below importance floor %.1f%%", 100 * share[x], 100 * importance_floor)
+    } else if (is.na(threshold) || !length(kept) || max(r[x, kept]) <= threshold) {
       kept <- c(kept, x)
     } else {
       w <- kept[which.max(r[x, kept])]
@@ -147,5 +156,16 @@ select_predictors <- function(X, Y, opt, threshold, rank_by, keep_priority = cha
   }
   list(selected = v[v %in% kept], rank = setNames(match(v, v[ord]), v),
        score = if (rank_by == "correlation") setNames(rep(NA_real_, length(v)), v) else score,
+       share = if (rank_by == "correlation") setNames(rep(NA_real_, length(v)), v) else share,
        mean_abs_r = mean_abs_r, reason = reason, n_pos_rsq = n_pos_rsq)
+}
+
+# --importance_floor: absent or "none" = NA; else a fraction in [0, 1)
+parse_floor <- function(opt, rank_by) {
+  f <- opt$importance_floor
+  if (is.null(f) || f %in% c("none", "")) return(NA_real_)
+  f <- suppressWarnings(as.numeric(f))
+  if (is.na(f) || f < 0 || f >= 1) stop("importance_floor must be a fraction in [0, 1), got ", opt$importance_floor)
+  if (rank_by == "correlation") stop("importance_floor needs rank_by importance or accuracy")
+  f
 }
