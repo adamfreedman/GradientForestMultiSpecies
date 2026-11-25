@@ -49,7 +49,7 @@ if (opt$rank_by == "correlation") rep[, (score_col) := NULL]
 setorder(rep, rank)
 if (length(const)) rep <- rbind(rep, data.table(variable = const, status = "dropped",
                                                 reason = "constant across sites"), fill = TRUE)
-fwrite(rep, opt$out_report, sep = "\t", na = "NA")
+fwrite(rep, opt$out_report, sep = "\t", na = "NA", quote = FALSE)
 writeLines(sel$selected, opt$out_list)
 message(sprintf("%d sites; kept %d of %d predictors (rank_by = %s, threshold = %s)",
                 nrow(X), length(sel$selected), length(vars), opt$rank_by, opt$threshold))

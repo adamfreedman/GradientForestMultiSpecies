@@ -18,7 +18,7 @@ rule study_area:
     params:
         src=study_area_args(),
     log:
-        f"{OUT}/logs/study_area.log",
+        f"{BASE_OUT}/logs/study_area.log",
     conda:
         "../envs/py_geo.yaml"
     shell:
@@ -40,7 +40,7 @@ rule get_boundaries:
         source=lambda wc: config["env"].get("boundaries") or "none",
         cache=f"{ENV_DIR}/downloads",
     log:
-        f"{OUT}/logs/get_boundaries.log",
+        f"{BASE_OUT}/logs/get_boundaries.log",
     conda:
         "../envs/py_geo.yaml"
     shell:
@@ -64,7 +64,7 @@ rule prep_env_stack:
     resources:
         mem_mb=24000,
     log:
-        f"{OUT}/logs/prep_env_stack.log",
+        f"{BASE_OUT}/logs/prep_env_stack.log",
     conda:
         "../envs/py_geo.yaml"
     shell:

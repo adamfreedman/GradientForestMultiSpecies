@@ -64,6 +64,11 @@ rule qc_report:
         pvals=m_dir("gf/random_pvalues.tsv"),
         snp_pvals=m_dir("gf/snp_pvalues.tsv"),
         unmapped=sp_file("qc/unmapped_samples.tsv"),
+        stability=lambda wc: (
+            []
+            if is_refit(wc) or not STABILITY_ON
+            else [f"{OUT}/{wc.model}/predictors/stability_{t}.tsv" for t in ("variables", "sites")]
+        ),
     output:
         html=m_dir("qc.html"),
         tuning_png=m_dir("plots/ntree_tuning.png"),
@@ -73,6 +78,10 @@ rule qc_report:
         spdir=m_dir(),
         label=model_label,
         refit=lambda wc: "--refit=1" if is_refit(wc) else "",
+        stability=lambda wc, input: (
+            f"--stability_vars={input.stability[0]} --stability_sites={input.stability[1]}" if input.stability else ""
+        ),
+        selection="--selection=none" if SELECT_THRESHOLD == "none" else "",
         thr=lambda wc: (
             f"--min_snp_rsq_cor={_TUNE.get('min_snp_rsq_cor', 0.98)} "
             f"--max_importance_change={_TUNE.get('max_importance_change', 0.05)} "
@@ -88,6 +97,7 @@ rule qc_report:
         "--env_sites={input.sites} --predictors={input.predictors} --tuning={input.tuning} "
         "--ntree={input.ntree} --summary={input.summary} --pvals={input.pvals} {params.thr} "
         "--heatmap={input.heatmap} --snp_pvals={input.snp_pvals} --unmapped={input.unmapped} {params.refit} "
+        "{params.stability} {params.selection} "
         "--out={output.html} --out_tuning_png={output.tuning_png} > {log} 2>&1"
 
 

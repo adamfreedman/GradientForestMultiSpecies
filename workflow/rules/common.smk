@@ -5,8 +5,18 @@ import re
 import pandas as pd
 
 SCRIPTS = os.path.join(workflow.basedir, "scripts")
-OUT = config.get("outdir", "results")
-ENV_DIR = f"{OUT}/env"
+def _flag(x):
+    return str(x).strip().lower() in ("true", "1", "yes")
+
+
+# use_all_predictors (run_slurm.sh --use-all-predictors, or --config use_all_predictors=true):
+# no predictor selection; every candidate variable goes into the model. Results then go to
+# <outdir>_all_predictors so they never overwrite a run with selection. The environmental
+# layers and the gradientForest install are shared (always under <outdir>).
+USE_ALL_PREDICTORS = _flag(config.get("use_all_predictors", False))
+BASE_OUT = config.get("outdir", "results")
+OUT = f"{BASE_OUT}_all_predictors" if USE_ALL_PREDICTORS else BASE_OUT
+ENV_DIR = f"{BASE_OUT}/env"
 
 SAMPLES = (
     pd.read_csv(config["samples"], sep="\t", dtype=str, comment="#")
@@ -53,7 +63,10 @@ def snp_scale(freq):
 
 
 _PRED = config["predictors"]
-SELECT_THRESHOLD = _PRED.get("corr_threshold") or "none"
+SELECT_THRESHOLD = "none" if USE_ALL_PREDICTORS else (_PRED.get("corr_threshold") or "none")
+# leave-one-population-out predictor selection (diagnostic table in qc.html); only
+# meaningful when variables are selected
+STABILITY_ON = _flag(_PRED.get("stability", True)) and SELECT_THRESHOLD != "none"
 SELECT_RANK_BY = _PRED.get("rank_by", "importance")
 if SELECT_RANK_BY not in ("importance", "accuracy", "correlation"):
     raise ValueError(f"predictors.rank_by must be importance, accuracy or correlation, got {SELECT_RANK_BY!r}")
@@ -72,6 +85,20 @@ def random_runtime(wc, input):
     n_pred = sum(1 for l in open(input.preds) if l.strip())
     per_rep = ntree / 100 * max(1.0, n_pred / 10) * snp_scale(input.freq)
     return 30 + RANDOM_BATCH * math.ceil(per_rep)
+
+
+def n_populations(sp):
+    """populations in the species' latlongs file: an upper bound on the populations
+    with genotype data, so the number of leave-one-out jobs is known before the
+    genotypes are processed (jobs past the real number write empty tables)"""
+    return len(pd.read_csv(SAMPLES.loc[sp, "latlongs"], dtype=str))
+
+
+def screen_runtime(wc, input):
+    """SLURM minutes for one screening fit with every candidate: measured ~18 min at
+    500 trees, 19 variables, 56k SNPs, 13 sites; ~4x margin"""
+    n_pred = sum(1 for l in open(input.candidates) if l.strip())
+    return 30 + math.ceil(SCREEN_NTREE / 100 * max(1.0, n_pred / 10) * snp_scale(input.freq))
 
 
 def random_mem(wc, input):
@@ -164,6 +191,8 @@ def all_outputs():
         "random_vs_real",
     ]
     out = [f"{OUT}/{sp}/predictors/correlation.png" for sp in SPECIES]
+    if STABILITY_ON:
+        out += [f"{OUT}/{sp}/predictors/stability_variables.tsv" for sp in SPECIES]
     for m in models():
         for p in plots:
             out += [f"{OUT}/{m}/plots/{p}.pdf", f"{OUT}/{m}/plots/{p}.png"]

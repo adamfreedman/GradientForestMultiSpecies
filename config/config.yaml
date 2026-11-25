@@ -54,6 +54,13 @@ predictors:
   rank_by: importance
   screen_ntree: 500       # trees in the screening fit
   keep_priority: []       # variables ranked first, so kept unless correlated with each other
+  # Diagnostic: repeat the selection once per population, leaving that population out,
+  # and report in qc.html how often each variable is kept (sensitivity of the choice to
+  # the sampled populations). Costs one screening fit per population. The model always
+  # uses the full-data selection.
+  stability: true
+  # To skip selection and use every candidate variable: sbatch run_slurm.sh --use-all-predictors
+  # (or snakemake ... --config use_all_predictors=true); results go to <outdir>_all_predictors.
 
 genotypes:
   min_ind_per_pop: 5          # populations with fewer genotyped individuals are dropped;

@@ -253,6 +253,52 @@ predictors_legend <- legend(
        "in config.yaml; with <code>rank_by: correlation</code> the ranking ignores the genetic data (least correlated ",
        "with the others first)."))
 
+no_selection_legend <- legend(
+  "<p><b>Variable selection was turned off</b> (<code>--use-all-predictors</code>, or ",
+  "<code>predictors.corr_threshold: null</code>): every candidate variable that varies across the sampled sites is ",
+  "in the model, including strongly correlated ones (see the figure). Importance is then shared among correlated ",
+  "variables, so a low importance for one of them does not mean its signal is unimportant.</p>",
+  "<p><b>Figure:</b> correlation between every pair of variables across the sampled sites (red = positive, blue = ",
+  "negative, darker = stronger, value printed in each cell).</p>")
+
+stab_html <- ""
+if (!is_refit && !is.null(opt$stability_vars) && nzchar(opt$stability_vars)) {
+  sv <- fread(opt$stability_vars)
+  ss <- fread(opt$stability_sites, colClasses = list(character = "left_out"))
+  n_fit <- nrow(ss)
+  n_same <- sum(ss$same_as_full == "yes")
+  kept <- sv[status == "kept"]
+  unstable <- kept[kept_in < 0.75 * n_fit, variable]
+  if (length(unstable)) warnings <- c(warnings, sprintf(
+    "Predictor choice is sensitive to the sampled populations: %s kept in fewer than 75%% of leave-one-out selections (see Predictors).",
+    paste(unstable, collapse = ", ")))
+  stab_legend <- legend(
+    "<p><b>How much does the choice of variables depend on which populations were sampled?</b> ",
+    sprintf("The selection above was repeated %d times, each time leaving out one population ", n_fit),
+    "(screening fit and correlations both recomputed without it). ",
+    sprintf("The full-data selection was reproduced exactly in <b>%d of %d</b> of these.</p>", n_same, n_fit),
+    "<p>A kept variable that stays kept in nearly every case is a robust choice. A kept variable that is often ",
+    "replaced is best read as standing for its correlated group (listed in the last column) rather than as the ",
+    "single driver: which member of the group is chosen depends on particular populations. A variable can also ",
+    "drop out with no substitute, when without one population it becomes too correlated with another kept variable. ",
+    "This table describes sensitivity only; the model and tests above use the full-data selection.</p><ul>",
+    "<li><b>status</b>, <b>full_rank</b>: the variable's status and rank in the full-data selection above.</li>",
+    sprintf("<li><b>kept_in</b> / <b>kept_pct</b>: in how many of the %d leave-one-out selections it was kept.</li>", n_fit),
+    "<li><b>median_rank</b>, <b>min_rank</b>, <b>max_rank</b>: its rank across those selections.</li>",
+    "<li><b>when_not_kept_replaced_by</b>: when it was not kept, the kept variable most correlated with it ",
+    "(number of selections; average |r|), i.e. what stood in for it.</li></ul>")
+  sites_legend <- legend(
+    "<p><b>Per left-out population.</b> <b>n_pos_rsq</b>: SNPs with R&sup2; &gt; 0 in the screening fit without ",
+    "that population (a much higher or lower value than for the others marks a population with strong influence ",
+    "on the fit). <b>n_kept</b>: variables selected. <b>added</b> / <b>lost</b>: variables selected that are not in ",
+    "the full-data selection, and full-data variables not selected. Populations that change the selection most ",
+    "are the ones it depends on.</p>",
+    tech("set <code>predictors.stability: false</code> in config.yaml to skip this diagnostic (one screening fit ",
+         "per population)."))
+  stab_html <- paste0("<h3>Sensitivity to the sampled populations (leave one population out)</h3>",
+                      stab_legend, html_table(sv), sites_legend, html_table(ss))
+}
+
 snp_filter_legend <- legend(
   "<p>SNPs removed before the analysis. Only SNPs that cannot be analysed are removed: those with no genotype data ",
   "in some population (so no allele frequency there) and those with the same allele frequency in every population ",
@@ -317,8 +363,9 @@ section("Per-SNP tests", snp_tests_legend, html_table(snp_tab)),
 section(if (is_refit) "Predictors (selected from the full model)" else "Predictors",
         if (is_refit) legend("<p>In this refit, the variables kept are those whose importance beat the randomized fits ",
                              "of the full model (p &le; alpha for at least one importance measure). The correlation figure ",
-                             "is from the full set of variables.</p>") else predictors_legend,
-        html_table(preds), img(opt$heatmap, "60%")),
+                             "is from the full set of variables.</p>")
+        else if (identical(opt$selection, "none")) no_selection_legend else predictors_legend,
+        html_table(preds), img(opt$heatmap, "60%"), stab_html),
 section("SNP filtering", snp_filter_legend, html_table(snpf)),
 section("Number of trees", ntree_legend, ntree_txt, html_table(tun), if (!is.null(tun_png)) img(tun_png)),
 section("Populations", pops_legend, html_table(merge(sites[, .(popid, sitename, lat, long, snapped_km)], pops, by = "popid", all.x = TRUE)[order(suppressWarnings(as.numeric(popid)), popid)])),

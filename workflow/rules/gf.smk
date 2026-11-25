@@ -11,9 +11,9 @@ rule install_gf:
     """One-time install of extendedForest + gradientForest (R-Forge) into the R conda env.
     Runs on the submit host because compute nodes may lack internet access."""
     output:
-        f"{OUT}/.gf_installed",
+        f"{BASE_OUT}/.gf_installed",
     log:
-        f"{OUT}/logs/install_gf.log",
+        f"{BASE_OUT}/logs/install_gf.log",
     conda:
         "../envs/r_gf.yaml"
     shell:
@@ -66,6 +66,57 @@ rule select_predictors:
         "--layers={input.layers} --include={params.include} --threshold={params.thr} {params.select} "
         "{params.args} --out_list={output.selected} --out_candidates={output.candidates} "
         "--out_report={output.report} --out_heatmap={output.heatmap} > {log} 2>&1"
+
+
+rule screen_leave_one_out:
+    """Predictor selection repeated with population number {k} left out (diagnostic)."""
+    input:
+        gf_ok=rules.install_gf.output,
+        sites=sp_dir("env_sites.tsv"),
+        freq=sp_dir("genotypes/popfreq.tsv"),
+        candidates=sp_dir("predictors/candidates.txt"),
+    output:
+        sp_dir("predictors/leave_one_out/site{k}.tsv"),
+    wildcard_constraints:
+        k=r"\d+",
+    params:
+        thr=SELECT_THRESHOLD,
+        select=SELECT_ARGS,
+        args=GF_ARGS,
+    resources:
+        mem_mb=fit_mem,
+        runtime=screen_runtime,
+    log:
+        f"{OUT}/logs/{{species}}/screen_leave_one_out/site{{k}}.log",
+    conda:
+        "../envs/r_gf.yaml"
+    shell:
+        "Rscript {SCRIPTS}/screen_leave_one_out.R --env_sites={input.sites} --popfreq={input.freq} "
+        "--candidates={input.candidates} --threshold={params.thr} {params.select} {params.args} "
+        "--k={wildcards.k} --out={output} > {log} 2>&1"
+
+
+rule predictor_stability:
+    """How often each variable is selected when one population is left out."""
+    input:
+        loo=lambda wc: [
+            f"{OUT}/{wc.species}/predictors/leave_one_out/site{k}.tsv" for k in range(1, n_populations(wc.species) + 1)
+        ],
+        selected=sp_dir("predictors/selected.txt"),
+        report=sp_dir("predictors/report.tsv"),
+    output:
+        variables=sp_dir("predictors/stability_variables.tsv"),
+        sites=sp_dir("predictors/stability_sites.tsv"),
+    resources:
+        mem_mb=2000,
+        runtime=15,
+    log:
+        f"{OUT}/logs/{{species}}/predictor_stability.log",
+    conda:
+        "../envs/r_gf.yaml"
+    shell:
+        "Rscript {SCRIPTS}/predictor_stability.R --selected={input.selected} --report={input.report} "
+        "--out_variables={output.variables} --out_sites={output.sites} {input.loo} > {log} 2>&1"
 
 
 rule gf_fit:

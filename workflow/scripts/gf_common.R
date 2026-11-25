@@ -118,6 +118,7 @@ select_predictors <- function(X, Y, opt, threshold, rank_by, keep_priority = cha
   diag(r) <- 0
   mean_abs_r <- if (length(v) > 1) colSums(r) / (length(v) - 1) else setNames(0, v)
   score <- setNames(rep(NA_real_, length(v)), v)
+  n_pos_rsq <- NA_integer_
   if (!is.na(threshold) && length(v) > 1) {
     if (rank_by == "correlation") {
       score <- -mean_abs_r
@@ -126,7 +127,9 @@ select_predictors <- function(X, Y, opt, threshold, rank_by, keep_priority = cha
       o$ntree <- opt$screen_ntree
       message("screening fit with all ", length(v), " candidate predictors")
       gf <- fit_gf(X, Y, o)
-      score <- gf_stats(gf, v)[[rank_by]]
+      st <- gf_stats(gf, v)
+      score <- st[[rank_by]]
+      n_pos_rsq <- st$n_pos_rsq
       rm(gf)
       invisible(gc())
     }
@@ -144,5 +147,5 @@ select_predictors <- function(X, Y, opt, threshold, rank_by, keep_priority = cha
   }
   list(selected = v[v %in% kept], rank = setNames(match(v, v[ord]), v),
        score = if (rank_by == "correlation") setNames(rep(NA_real_, length(v)), v) else score,
-       mean_abs_r = mean_abs_r, reason = reason)
+       mean_abs_r = mean_abs_r, reason = reason, n_pos_rsq = n_pos_rsq)
 }
