@@ -1,6 +1,7 @@
-"""validate_inputs.py and vcf_to_popfreq.py."""
+"""validate_inputs.py, vcf_to_popfreq.py and genotype_pca.py."""
 import os
 
+import numpy as np
 import pandas as pd
 import pytest
 
@@ -162,3 +163,68 @@ def test_popfreq_on_test_species(tmp_path, env_tif, vcf):
     else:
         assert len(f) == 10 and summ["total"] == 250
     assert f.drop(columns="popid").stack().between(0, 1).all()
+
+    # genotype PCA on the same individuals
+    pca = {k: tmp_path / f"pca_{k}.tsv" for k in ("variance", "scores", "info")}
+    run_script("genotype_pca.py", "--vcf", os.path.join(d, vcf), "--sample-pop", tmp_path / "sample_pop.tsv",
+               "--env-sites", tmp_path / "env_sites.tsv", "--pop-counts", out["pops"],
+               "--out-variance", pca["variance"], "--out-scores", pca["scores"], "--out-info", pca["info"])
+    sc = pd.read_csv(pca["scores"], sep="\t", dtype={"popid": str, "sample_id": str})
+    va = pd.read_csv(pca["variance"], sep="\t")
+    n = 123 if sp_name == "spA" else 80
+    assert len(sc) == n and sc.sample_id.is_unique  # every mapped individual, incl. small populations
+    assert set(sc.popid[sc.in_gf_model == "no"]) == ({"13"} if sp_name == "spA" else set())
+    assert len(va) <= n - 1 and va.pct_variance.is_monotonic_decreasing
+    assert va.pct_variance.sum() == pytest.approx(100, abs=0.01)
+    assert sc.columns.tolist()[5:] == va.PC.tolist()
+    # the simulated populations differ in allele frequency: PC1 separates them
+    by_pop = sc.groupby("popid").PC1
+    assert by_pop.mean().var() > 5 * by_pop.var().mean()
+
+
+def test_genotype_pca_matches_direct_svd(tmp_path):
+    """scores and variance shares equal an SVD of the standardized, mean-imputed matrix"""
+    rng = np.random.default_rng(3)
+    samples = ["a1", "a2", "b1", "b2", "c1", "c2", "d1"]
+    G = rng.integers(0, 3, size=(40, 7)).astype(float)
+    G[rng.random(G.shape) < 0.1] = np.nan
+    G[5] = 1   # every individual heterozygous: no variation, skipped
+    G[6] = np.nan  # no calls: skipped
+    code = {0.0: "0/0", 1.0: "0/1", 2.0: "1/1"}
+    body = ["\t".join(["c1", str(i + 1), f"s{i}", "A", "G", ".", "PASS", ".", "GT"] +
+                      [code.get(g, "./.") for g in row]) for i, row in enumerate(G)]
+    body.append("\t".join(["c1", "99", "m", "A", "G,T", ".", "PASS", ".", "GT"] + ["0/1"] * 7))  # multiallelic
+    vcf = tmp_path / "t.vcf"
+    vcf.write_text(VCF_HEAD + "\n".join(body) + "\n")
+    sp = tmp_path / "sp.tsv"
+    sp.write_text("vcf_id\tpopid\n" + "".join(f"{s}\t{s[0]}\n" for s in samples))
+    sites = tmp_path / "sites.tsv"
+    sites.write_text("popid\tsitename\na\tA\nb\tB\nc\tC\nd\tD\n")
+    pops = tmp_path / "pops.tsv"
+    pops.write_text("popid\tn_ind\na\t2\nb\t2\nc\t2\n")
+    out = {k: tmp_path / f"{k}.tsv" for k in ("variance", "scores", "info")}
+    run_script("genotype_pca.py", "--vcf", vcf, "--sample-pop", sp, "--env-sites", sites, "--pop-counts", pops,
+               "--out-variance", out["variance"], "--out-scores", out["scores"], "--out-info", out["info"])
+
+    keep = [i for i in range(len(G)) if i not in (5, 6)]
+    X = G[keep].T  # individuals x SNPs
+    f = np.nanmean(X, axis=0) / 2
+    Z = np.nan_to_num((X - 2 * f) / np.sqrt(2 * f * (1 - f)))
+    U, S, _ = np.linalg.svd(Z / np.sqrt(Z.shape[1]), full_matrices=False)
+    expect = U * S
+    pct = 100 * S ** 2 / (S ** 2).sum()
+
+    sc = pd.read_csv(out["scores"], sep="\t", dtype=str)
+    va = pd.read_csv(out["variance"], sep="\t")
+    k = len(va)
+    assert k == 6  # 7 individuals: at most 6 PCs after centring
+    got = sc[[f"PC{i + 1}" for i in range(k)]].astype(float).to_numpy()
+    assert np.allclose(np.abs(got), np.abs(expect[:, :k]), atol=1e-4)
+    assert np.allclose(va.pct_variance, pct[:k], atol=1e-4)
+    assert (got[np.abs(got).argmax(axis=0), range(k)] > 0).all()  # sign convention
+    assert sc.in_gf_model.tolist() == ["yes"] * 6 + ["no"]
+    assert sc.sitename.tolist() == ["A", "A", "B", "B", "C", "C", "D"]
+    assert np.allclose(sc.missing_frac.astype(float), np.isnan(X).mean(axis=1))
+    info = dict(pd.read_csv(out["info"], sep="\t").values)
+    assert info == {"n_individuals": 7, "snps_total": 41, "snps_not_biallelic_snp": 1, "snps_no_calls": 1,
+                    "snps_invariant": 1, "snps_used": 38}

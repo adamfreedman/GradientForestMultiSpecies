@@ -211,6 +211,7 @@ def all_outputs():
         "random_vs_real",
     ]
     out = [f"{OUT}/{sp}/predictors/correlation.png" for sp in SPECIES]
+    out += [f"{OUT}/{sp}/pca/pca_pc1_pc2.{ext}" for sp in SPECIES for ext in ("pdf", "png")]
     if STABILITY_ON:
         out += [f"{OUT}/{sp}/predictors/stability_variables.tsv" for sp in SPECIES]
     for m in models():

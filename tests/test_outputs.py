@@ -70,6 +70,24 @@ def test_inputs_and_genotypes(outdir, sp):
     assert "# errors (0)" in open(f"{d}/qc/validation.txt").read()
 
 
+@pytest.mark.parametrize("outdir,sp", SP_CASES)
+def test_genotype_pca(outdir, sp):
+    d = os.path.join(existing(outdir), sp, "pca")
+    sc = read(f"{d}/sample_scores.tsv", dtype={"popid": str})
+    va = read(f"{d}/variance_explained.tsv")
+    n_ind = 123 if sp == "spA" else 80  # every mapped individual, incl. populations too small for GF
+    assert len(sc) == n_ind
+    assert sc.columns.tolist()[:5] == ["sample_id", "popid", "sitename", "missing_frac", "in_gf_model"]
+    assert sc.columns.tolist()[5:] == va.PC.tolist() and len(va) <= n_ind - 1
+    assert va.pct_variance.sum() == pytest.approx(100, abs=0.01)
+    assert va.cumulative_pct.iloc[-1] == pytest.approx(100, abs=0.01)
+    for ext in ("pdf", "png"):
+        assert os.path.getsize(f"{d}/pca_pc1_pc2.{ext}") > 1000
+    html = open(os.path.join(existing(outdir), sp, "qc.html")).read()
+    assert "<h2>Genotype PCA</h2>" in html
+    assert "Genotype PCA" not in open(os.path.join(existing(outdir), sp, "refit_sigvars", "qc_refit.html")).read()
+
+
 def selected_vars(d):
     return [v for v in open(f"{d}/predictors/selected.txt").read().split() if v]
 
