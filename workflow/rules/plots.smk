@@ -68,8 +68,8 @@ rule qc_report:
         pca=lambda wc: (
             []
             if is_refit(wc)
-            else [f"{OUT}/{wc.model}/pca/{f}" for f in ("pca_pc1_pc2.png", "variance_explained.tsv",
-                                                         "sample_scores.tsv", "pca_info.tsv")]
+            else [f"{OUT}/{wc.model}/pca/{f}" for f in ("pca_pc1_pc2.png", "pca_pc1_pc3.png",
+                                                         "variance_explained.tsv", "sample_scores.tsv", "pca_info.tsv")]
         ),
         stability=lambda wc: (
             []
@@ -89,7 +89,7 @@ rule qc_report:
             f"--stability_vars={input.stability[0]} --stability_sites={input.stability[1]}" if input.stability else ""
         ),
         pca=lambda wc, input: (
-            "--pca_png={} --pca_variance={} --pca_scores={} --pca_info={}".format(*input.pca) if input.pca else ""
+            "--pca_png={},{} --pca_variance={} --pca_scores={} --pca_info={}".format(*input.pca) if input.pca else ""
         ),
         selection="--selection=none" if SELECT_THRESHOLD == "none" else (
             f"--importance_floor={IMPORTANCE_FLOOR:g}" if IMPORTANCE_FLOOR is not None else ""

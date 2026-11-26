@@ -81,8 +81,9 @@ def test_genotype_pca(outdir, sp):
     assert sc.columns.tolist()[5:] == va.PC.tolist() and len(va) <= n_ind - 1
     assert va.pct_variance.sum() == pytest.approx(100, abs=0.01)
     assert va.cumulative_pct.iloc[-1] == pytest.approx(100, abs=0.01)
-    for ext in ("pdf", "png"):
-        assert os.path.getsize(f"{d}/pca_pc1_pc2.{ext}") > 1000
+    for pair in ("pc1_pc2", "pc1_pc3"):
+        for ext in ("pdf", "png"):
+            assert os.path.getsize(f"{d}/pca_{pair}.{ext}") > 1000
     html = open(os.path.join(existing(outdir), sp, "qc.html")).read()
     assert "<h2>Genotype PCA</h2>" in html
     assert "Genotype PCA" not in open(os.path.join(existing(outdir), sp, "refit_sigvars", "qc_refit.html")).read()

@@ -81,14 +81,13 @@ rule plot_genotype_pca:
         variance=sp_dir("pca/variance_explained.tsv"),
         info=sp_dir("pca/pca_info.tsv"),
     output:
-        pdf=sp_dir("pca/pca_pc1_pc2.pdf"),
-        png=sp_dir("pca/pca_pc1_pc2.png"),
+        expand(sp_dir("pca/pca_{pair}.{ext}"), pair=["pc1_pc2", "pc1_pc3"], ext=["pdf", "png"], allow_missing=True),
     params:
-        prefix=lambda wc, output: output.pdf[: -len(".pdf")],
+        outdir=sp_dir("pca"),
     log:
         f"{OUT}/logs/{{species}}/plot_genotype_pca.log",
     conda:
         "../envs/r_gf.yaml"
     shell:
         "Rscript {SCRIPTS}/plot_genotype_pca.R --species='{wildcards.species}' --scores={input.scores} "
-        "--variance={input.variance} --info={input.info} --out_prefix={params.prefix} > {log} 2>&1"
+        "--variance={input.variance} --info={input.info} --outdir={params.outdir} > {log} 2>&1"

@@ -352,7 +352,8 @@ if (!is.null(opt$pca_png)) {
   not_gf <- unique(psc[in_gf_model == "no", popid])
   pca_legend <- legend(
     "<p>Principal components of the individual genotypes: a check on population structure and on the samples, ",
-    "independent of the environment and of gradient forest. Each point is an individual, coloured by population, ",
+    "independent of the environment and of gradient forest. Left: PC1 against PC2; right: PC1 against PC3. ",
+    "Each point is an individual, coloured by population, ",
     "with the population ID placed at the mean of its individuals. Individuals of the same population ",
     "usually cluster together; one sitting with another population may be mislabelled in the popmap or ",
     "contaminated, and one near the centre with high missing_frac may simply lack data.</p>",
@@ -364,7 +365,7 @@ if (!is.null(opt$pca_png)) {
                                 esc(paste(not_gf, collapse = ", "))),
     "</p>",
     tech("SNPs are centred and scaled by sqrt(2p(1-p)) (Patterson et al. 2006); missing genotypes are set to the mean."))
-  pca_html <- section("Genotype PCA", pca_legend, img(opt$pca_png, "70%"),
+  pca_html <- section("Genotype PCA", pca_legend, paste(vapply(strsplit(opt$pca_png, ",")[[1]], img, "", width = "49%"), collapse = " "),
                       html_table(head(pva[, .(PC, pct_variance, cumulative_pct)], 10), digits = 3),
                       if (nrow(hi_miss)) paste0("<p>Individuals with more than 50% missing genotypes:</p>",
                                                 html_table(hi_miss[, .(sample_id, popid, missing_frac)], digits = 3)))
