@@ -34,9 +34,12 @@ jobs:
         run: pytest -v tests --ignore=tests/test_outputs.py
 
       - name: Snakemake lint (advisory)
-        # style suggestions only (e.g. scripts directory used in shell commands); never fails the run
-        continue-on-error: true
-        run: snakemake --lint --configfile .test/config/config.yaml
+        # style suggestions only (e.g. scripts directory used in shell commands); never fails
+        # the run. Snakemake exits 1 whenever it has any suggestion, so report that as a
+        # warning instead of letting GitHub show it as an error.
+        run: |
+          snakemake --lint --configfile .test/config/config.yaml \
+            || echo "::warning title=Snakemake lint::style suggestions only (advisory); see this step's log"
 
   workflow:
     name: Full workflow on test data
