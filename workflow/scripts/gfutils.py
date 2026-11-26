@@ -61,7 +61,7 @@ class EnvStack:
         self._vxy = None
 
     def rowcol(self, lon, lat):
-        col, row = ~self.transform * (lon, lat)
+        col, row = ~self.transform @ (lon, lat)
         return int(np.floor(row)), int(np.floor(col))
 
     def inside(self, lon, lat):
@@ -71,7 +71,7 @@ class EnvStack:
     def valid_xy(self):
         if self._vxy is None:
             rows, cols = np.nonzero(self.valid)
-            xs, ys = self.transform * (cols + 0.5, rows + 0.5)
+            xs, ys = self.transform @ (cols + 0.5, rows + 0.5)
             self._vxy = (rows, cols, np.asarray(xs), np.asarray(ys))
         return self._vxy
 

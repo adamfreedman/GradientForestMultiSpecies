@@ -90,7 +90,7 @@ def main():
     stack = np.stack(arrays)
     if a.aggregate > 1:
         stack = np.stack([block_mean(x, a.aggregate) for x in stack])
-        transform = transform * rasterio.Affine.scale(a.aggregate)
+        transform = transform @ rasterio.Affine.scale(a.aggregate)
     nodata_any = np.isnan(stack).any(axis=0)
     stack[:, nodata_any] = np.nan
     print(f"grid {stack.shape[2]} x {stack.shape[1]}, {int((~nodata_any).sum())} complete cells, "
