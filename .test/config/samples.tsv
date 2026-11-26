@@ -1,0 +1,3 @@
+species	vcf	popmap	latlongs	id_regex	min_ind_per_pop
+spA	.test/data/spA/spA.vcf	.test/data/spA/spA_id_to_pop.txt	.test/data/spA/spA_pop_latlongs.csv	^TEST_	4
+spB	.test/data/spB/spB.vcf.gz	.test/data/spB/spB_id_to_pop.txt	.test/data/spB/spB_pop_latlongs.csv		

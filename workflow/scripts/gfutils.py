@@ -10,12 +10,23 @@ KM_PER_DEG = 111.32
 
 
 def read_popmap(path):
-    """Two-column table (sampleid popid), whitespace or comma delimited, with header."""
-    df = pd.read_csv(path, sep=None, engine="python", dtype=str)
+    """Two-column table (sampleid popid) with a header. Comma delimited if the header
+    contains a comma, otherwise any run of spaces and/or tabs separates columns."""
+    with open(path) as fh:
+        header = fh.readline()
+    sep = "," if "," in header else r"\s+"
+    # index_col=False: a trailing delimiter must not turn the first column into the index
+    df = pd.read_csv(path, sep=sep, engine="python", dtype=str, index_col=False)
     df.columns = [c.strip().lower() for c in df.columns]
     if not {"sampleid", "popid"} <= set(df.columns):
         sys.exit(f"ERROR: {path} must have columns 'sampleid' and 'popid' (found {list(df.columns)})")
-    return df[["sampleid", "popid"]].apply(lambda s: s.str.strip())
+    df = df[["sampleid", "popid"]].apply(lambda s: s.str.strip())
+    empty = df.isna().any(axis=1) | (df == "").any(axis=1)
+    if empty.any():
+        rows = (df.index[empty] + 2).tolist()  # file line numbers (header is line 1)
+        sys.exit(f"ERROR: {path}: empty sampleid or popid on line(s) {rows[:10]}"
+                 f"{' ...' if len(rows) > 10 else ''}")
+    return df
 
 
 def read_latlongs(path):

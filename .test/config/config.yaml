@@ -1,0 +1,56 @@
+# Configuration for the CI tests: the synthetic dataset in .test/data (see
+# .test/make_test_data.py), with small settings so the whole workflow runs in a
+# few minutes. Run from the repository root:
+#   snakemake --use-conda --cores 4 --configfile .test/config/config.yaml
+samples: .test/config/samples.tsv
+
+# keep test output away from real results
+outdir: .test/results
+
+env:
+  dir: .test/data/env
+  pattern: "*.asc"
+  name_regex: "bio_?(\\d+)"
+  name_template: "bio{0}"
+  clip: .test/data/study_area.geojson
+  bbox: []
+  boundaries: none        # no download in CI
+  grid_aggregate: 1
+  site_buffer_km: 0
+  max_snap_km: 10         # spA site 1 is ~8 km from the nearest valid cell
+
+predictors:
+  include: all
+  corr_threshold: 0.8
+  rank_by: importance
+  screen_ntree: 100
+  keep_priority: []
+  stability: true
+
+genotypes:
+  min_ind_per_pop: 5      # spA overrides with 4 in the sample sheet
+
+gf:
+  ntree: auto
+  ntree_tuning:
+    start: 50
+    factor: 2
+    max: 100
+    min_snp_rsq_cor: 0.98
+    max_importance_change: 0.05
+    min_turnover_cor: 0.99
+    n_cells: 200
+  maxLevel: auto
+  corr_threshold: 0.5
+  nbin: 201
+  n_random: 6
+  random_batch_size: 4    # two batches, the second partly filled
+  seed: 1
+  pca_vars: all
+  biplot_max_points: 5000
+  refit_significant:
+    enabled: true
+    alpha: 1.0            # keep every predictor, so the refit always runs
+    metrics: [importance, accuracy]
+    min_predictors: 2
+    subdir: refit_sigvars

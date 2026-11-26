@@ -1,0 +1,20 @@
+# Environment for running the tests: Snakemake plus the packages the Python
+# workflow scripts use (same as workflow/envs/py_geo.yaml) and pytest.
+# The R environment is created by Snakemake itself (--use-conda).
+name: gfms-test
+channels:
+  - conda-forge
+  - bioconda
+  - nodefaults
+dependencies:
+  - python=3.12
+  - snakemake-minimal=9.16.3
+  - numpy
+  - pandas
+  - rasterio
+  - geopandas
+  - pyogrio
+  - shapely
+  - cyvcf2
+  - matplotlib
+  - pytest
