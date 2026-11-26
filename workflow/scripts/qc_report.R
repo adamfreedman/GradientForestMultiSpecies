@@ -339,6 +339,37 @@ pops_legend <- legend("<p>Populations in the analysis: location, number of indiv
                       "and snapped_km, the distance a site was moved to the nearest grid cell with environmental data ",
                       "(0 = not moved). Populations with too few individuals are left out (see Warnings).</p>")
 
+# genotype PCA (individuals; qc.html only)
+pca_html <- NULL
+if (!is.null(opt$pca_png)) {
+  pva <- fread(opt$pca_variance)
+  psc <- fread(opt$pca_scores, colClasses = list(character = c("sample_id", "popid", "sitename")))
+  pinf <- fread(opt$pca_info)
+  hi_miss <- psc[missing_frac > 0.5]
+  if (nrow(hi_miss)) warnings <- c(warnings, sprintf(
+    "Genotype PCA: %d individual(s) with more than 50%% missing genotypes (pulled towards the centre of the PCA): %s",
+    nrow(hi_miss), paste(head(hi_miss$sample_id, 10), collapse = ", ")))
+  not_gf <- unique(psc[in_gf_model == "no", popid])
+  pca_legend <- legend(
+    "<p>Principal components of the individual genotypes: a check on population structure and on the samples, ",
+    "independent of the environment and of gradient forest. Each point is an individual, coloured by population, ",
+    "with the population ID placed at the mean of its individuals. Individuals of the same population ",
+    "usually cluster together; one sitting with another population may be mislabelled in the popmap or ",
+    "contaminated, and one near the centre with high missing_frac may simply lack data.</p>",
+    sprintf("<p>%d individuals and %s SNPs (biallelic SNPs variable among these individuals; no MAF or missingness ",
+            pinf[item == "n_individuals", n], format(pinf[item == "snps_used", n], big.mark = ",")),
+    "filter). The table gives the share of the genotype variance captured by the first PCs. Per-individual ",
+    "coordinates on every PC are in <code>pca/sample_scores.tsv</code>.",
+    if (length(not_gf)) sprintf(" Population(s) %s are included here but not in the gradient forest model (too few individuals).",
+                                esc(paste(not_gf, collapse = ", "))),
+    "</p>",
+    tech("SNPs are centred and scaled by sqrt(2p(1-p)) (Patterson et al. 2006); missing genotypes are set to the mean."))
+  pca_html <- section("Genotype PCA", pca_legend, img(opt$pca_png, "70%"),
+                      html_table(head(pva[, .(PC, pct_variance, cumulative_pct)], 10), digits = 3),
+                      if (nrow(hi_miss)) paste0("<p>Individuals with more than 50% missing genotypes:</p>",
+                                                html_table(hi_miss[, .(sample_id, popid, missing_frac)], digits = 3)))
+}
+
 warn_html <- if (length(warnings)) {
   paste0('<div class="warn"><b>Warnings</b><ul>', paste0("<li>", esc(warnings), "</li>", collapse = ""), "</ul></div>")
 } else '<div class="ok">No warnings.</div>'
@@ -387,6 +418,7 @@ section(if (is_refit) "Predictors (selected from the full model)" else "Predicto
         html_table(preds), img(opt$heatmap, "60%"), stab_html),
 section("SNP filtering", snp_filter_legend, html_table(snpf)),
 section("Number of trees", ntree_legend, ntree_txt, html_table(tun), if (!is.null(tun_png)) img(tun_png)),
+pca_html,
 section("Populations", pops_legend, html_table(merge(sites[, .(popid, sitename, lat, long, snapped_km)], pops, by = "popid", all.x = TRUE)[order(suppressWarnings(as.numeric(popid)), popid)])),
 section("Individuals not mapped to a population",
         if (nrow(unm)) paste0("<p>Excluded from the analysis. <i>missing_in_vcf</i> = in the popmap but not the VCF; ",

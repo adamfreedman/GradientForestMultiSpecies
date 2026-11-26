@@ -64,6 +64,13 @@ rule qc_report:
         pvals=m_dir("gf/random_pvalues.tsv"),
         snp_pvals=m_dir("gf/snp_pvalues.tsv"),
         unmapped=sp_file("qc/unmapped_samples.tsv"),
+        # genotype PCA: in qc.html only (the refit report would repeat it)
+        pca=lambda wc: (
+            []
+            if is_refit(wc)
+            else [f"{OUT}/{wc.model}/pca/{f}" for f in ("pca_pc1_pc2.png", "variance_explained.tsv",
+                                                         "sample_scores.tsv", "pca_info.tsv")]
+        ),
         stability=lambda wc: (
             []
             if is_refit(wc) or not STABILITY_ON
@@ -80,6 +87,9 @@ rule qc_report:
         refit=lambda wc: "--refit=1" if is_refit(wc) else "",
         stability=lambda wc, input: (
             f"--stability_vars={input.stability[0]} --stability_sites={input.stability[1]}" if input.stability else ""
+        ),
+        pca=lambda wc, input: (
+            "--pca_png={} --pca_variance={} --pca_scores={} --pca_info={}".format(*input.pca) if input.pca else ""
         ),
         selection="--selection=none" if SELECT_THRESHOLD == "none" else (
             f"--importance_floor={IMPORTANCE_FLOOR:g}" if IMPORTANCE_FLOOR is not None else ""
@@ -99,7 +109,7 @@ rule qc_report:
         "--env_sites={input.sites} --predictors={input.predictors} --tuning={input.tuning} "
         "--ntree={input.ntree} --summary={input.summary} --pvals={input.pvals} {params.thr} "
         "--heatmap={input.heatmap} --snp_pvals={input.snp_pvals} --unmapped={input.unmapped} {params.refit} "
-        "{params.stability} {params.selection} "
+        "{params.stability} {params.selection} {params.pca} "
         "--out={output.html} --out_tuning_png={output.tuning_png} > {log} 2>&1"
 
 

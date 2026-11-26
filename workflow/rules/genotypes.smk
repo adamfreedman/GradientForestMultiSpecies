@@ -1,4 +1,4 @@
-# Input validation and VCF -> population allele frequencies.
+# Input validation, VCF -> population allele frequencies, and a genotype PCA.
 
 
 rule validate_inputs:
@@ -49,3 +49,46 @@ rule vcf_to_popfreq:
         "--env-sites {input.sites} --min-ind-per-pop {params.min_ind} "
         "--out {output.freq} --out-summary {output.summary} --out-pops {output.pops} "
         "--out-snp-info {output.snp_info} > {log} 2>&1"
+
+
+rule genotype_pca:
+    """PCA of individual genotypes: population structure and sample QC (not used by GF)."""
+    input:
+        vcf=sample_col("vcf"),
+        sample_pop=sp_dir("qc/sample_pop.tsv"),
+        sites=sp_dir("env_sites.tsv"),
+        pops=sp_dir("genotypes/pop_counts.tsv"),
+    output:
+        variance=sp_dir("pca/variance_explained.tsv"),
+        scores=sp_dir("pca/sample_scores.tsv"),
+        info=sp_dir("pca/pca_info.tsv"),
+    resources:
+        mem_mb=8000,
+        runtime=60,
+    log:
+        f"{OUT}/logs/{{species}}/genotype_pca.log",
+    conda:
+        "../envs/py_geo.yaml"
+    shell:
+        "python {SCRIPTS}/genotype_pca.py --vcf {input.vcf} --sample-pop {input.sample_pop} "
+        "--env-sites {input.sites} --pop-counts {input.pops} --out-variance {output.variance} "
+        "--out-scores {output.scores} --out-info {output.info} > {log} 2>&1"
+
+
+rule plot_genotype_pca:
+    input:
+        scores=sp_dir("pca/sample_scores.tsv"),
+        variance=sp_dir("pca/variance_explained.tsv"),
+        info=sp_dir("pca/pca_info.tsv"),
+    output:
+        pdf=sp_dir("pca/pca_pc1_pc2.pdf"),
+        png=sp_dir("pca/pca_pc1_pc2.png"),
+    params:
+        prefix=lambda wc, output: output.pdf[: -len(".pdf")],
+    log:
+        f"{OUT}/logs/{{species}}/plot_genotype_pca.log",
+    conda:
+        "../envs/r_gf.yaml"
+    shell:
+        "Rscript {SCRIPTS}/plot_genotype_pca.R --species='{wildcards.species}' --scores={input.scores} "
+        "--variance={input.variance} --info={input.info} --out_prefix={params.prefix} > {log} 2>&1"
