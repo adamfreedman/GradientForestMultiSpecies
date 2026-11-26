@@ -353,10 +353,11 @@ if (!is.null(opt$pca_png)) {
   pca_legend <- legend(
     "<p>Principal components of the individual genotypes: a check on population structure and on the samples, ",
     "independent of the environment and of gradient forest. Left: PC1 against PC2; right: PC1 against PC3. ",
-    "Each point is an individual, coloured by population, ",
-    "with the population ID placed at the mean of its individuals. Individuals of the same population ",
-    "usually cluster together; one sitting with another population may be mislabelled in the popmap or ",
-    "contaminated, and one near the centre with high missing_frac may simply lack data.</p>",
+    "Each point is an individual; its position comes from its genotypes, and its colour and symbol from its ",
+    "population in the popmap (each population has its own combination; see the legend). The population ID is ",
+    "placed at the median of its individuals (each PC separately). Individuals of the same population usually ",
+    "cluster together. Black rings mark individuals flagged as sitting with another population (table below); ",
+    "an individual near the centre with high missing_frac may simply lack data.</p>",
     sprintf("<p>%d individuals and %s SNPs (biallelic SNPs variable among these individuals; no MAF or missingness ",
             pinf[item == "n_individuals", n], format(pinf[item == "snps_used", n], big.mark = ",")),
     "filter). The table gives the share of the genotype variance captured by the first PCs. Per-individual ",
@@ -365,8 +366,32 @@ if (!is.null(opt$pca_png)) {
                                 esc(paste(not_gf, collapse = ", "))),
     "</p>",
     tech("SNPs are centred and scaled by sqrt(2p(1-p)) (Patterson et al. 2006); missing genotypes are set to the mean."))
+  pchk <- fread(opt$pca_check, colClasses = list(character = c("sample_id", "popid", "nearest_other_pop", "note")))
+  cs <- as.numeric(strsplit(opt$pca_check_settings, ",")[[1]])
+  flag <- pchk[flagged == "yes"][order(-ratio)]
+  if (nrow(flag)) warnings <- c(warnings, sprintf(
+    "Genotype PCA: %d individual(s) sit with another population rather than their own (possible popmap or sample errors): %s",
+    nrow(flag), paste(head(flag$sample_id, 10), collapse = ", ")))
+  pchk[is.na(note), note := ""]
+  n_unchecked <- sum(pchk$note %in% "only individual in its population: not checked")
+  check_html <- paste0(
+    legend(sprintf(paste0(
+      "<p><b>Individuals that sit with another population.</b> On the first %d PCs, an individual is flagged ",
+      "when it is at least %g times closer to another population's median than to its own (<i>ratio</i>), and ",
+      "more than %g times farther from its own population's median than that population's members usually are ",
+      "(<i>spread_ratio</i>). Both conditions are needed because similar populations overlap: many individuals ",
+      "sit a little closer to a neighbour without being out of place. Medians are computed without the ",
+      "individual being checked; for a population of fewer than 3, the typical spread of all populations is used. A flagged individual may be mislabelled in the popmap, a sample mix-up or ",
+      "contaminated, a migrant or admixed individual, or from a genetically mixed population. ",
+      "All individuals, flagged or not, are in <code>pca/population_check.tsv</code>; the thresholds are ",
+      "<code>pca.population_check</code> in config.yaml.%s</p>"), cs[1], cs[2], cs[3],
+      if (n_unchecked) sprintf(" %d individual(s) alone in their population could not be checked.", n_unchecked) else "")),
+    if (nrow(flag)) html_table(merge(flag[, .(sample_id, popid, nearest_other_pop, ratio, spread_ratio, note)],
+                                     psc[, .(sample_id, missing_frac)], by = "sample_id", sort = FALSE), digits = 3)
+    else "<p>No individuals flagged.</p>")
   pca_html <- section("Genotype PCA", pca_legend, paste(vapply(strsplit(opt$pca_png, ",")[[1]], img, "", width = "49%"), collapse = " "),
                       html_table(head(pva[, .(PC, pct_variance, cumulative_pct)], 10), digits = 3),
+                      check_html,
                       if (nrow(hi_miss)) paste0("<p>Individuals with more than 50% missing genotypes:</p>",
                                                 html_table(hi_miss[, .(sample_id, popid, missing_frac)], digits = 3)))
 }

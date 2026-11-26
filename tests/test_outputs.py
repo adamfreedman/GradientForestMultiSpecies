@@ -84,8 +84,11 @@ def test_genotype_pca(outdir, sp):
     for pair in ("pc1_pc2", "pc1_pc3"):
         for ext in ("pdf", "png"):
             assert os.path.getsize(f"{d}/pca_{pair}.{ext}") > 1000
+    chk = read(f"{d}/population_check.tsv", dtype={"popid": str})
+    assert chk.sample_id.tolist() == sc.sample_id.tolist()
+    assert set(chk.flagged) <= {"yes", "no"}
     html = open(os.path.join(existing(outdir), sp, "qc.html")).read()
-    assert "<h2>Genotype PCA</h2>" in html
+    assert "<h2>Genotype PCA</h2>" in html and "Individuals that sit with another population" in html
     assert "Genotype PCA" not in open(os.path.join(existing(outdir), sp, "refit_sigvars", "qc_refit.html")).read()
 
 

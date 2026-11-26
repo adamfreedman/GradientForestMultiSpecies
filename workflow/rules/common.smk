@@ -135,6 +135,9 @@ def batch_reps(wc):
     return (b - 1) * RANDOM_BATCH + 1, min(b * RANDOM_BATCH, N_RANDOM)
 
 
+# genotype PCA: flagging individuals that sit with another population (see config.yaml)
+PCA_CHECK = (config.get("pca") or {}).get("population_check") or {}
+
 _REFIT = config["gf"].get("refit_significant") or {}
 REFIT_ON = bool(_REFIT.get("enabled", False))
 REFIT_DIR = str(_REFIT.get("subdir", "refit_sigvars"))
