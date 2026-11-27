@@ -135,6 +135,9 @@ def batch_reps(wc):
     return (b - 1) * RANDOM_BATCH + 1, min(b * RANDOM_BATCH, N_RANDOM)
 
 
+# genotype PCA: flagging individuals that sit with another population (see config.yaml)
+PCA_CHECK = (config.get("pca") or {}).get("population_check") or {}
+
 _REFIT = config["gf"].get("refit_significant") or {}
 REFIT_ON = bool(_REFIT.get("enabled", False))
 REFIT_DIR = str(_REFIT.get("subdir", "refit_sigvars"))
@@ -211,7 +214,7 @@ def all_outputs():
         "random_vs_real",
     ]
     out = [f"{OUT}/{sp}/predictors/correlation.png" for sp in SPECIES]
-    out += [f"{OUT}/{sp}/pca/pca_pc1_pc2.{ext}" for sp in SPECIES for ext in ("pdf", "png")]
+    out += [f"{OUT}/{sp}/pca/pca_{pr}.{ext}" for sp in SPECIES for pr in ("pc1_pc2", "pc1_pc3") for ext in ("pdf", "png")]
     if STABILITY_ON:
         out += [f"{OUT}/{sp}/predictors/stability_variables.tsv" for sp in SPECIES]
     for m in models():

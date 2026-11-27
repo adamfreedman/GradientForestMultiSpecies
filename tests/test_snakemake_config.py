@@ -35,7 +35,8 @@ def test_default_dag():
     files = dag_files()
     for f in (".test/results/spA/qc.html", ".test/results/spB/refit_sigvars/qc_refit.html",
               ".test/results/spA/predictors/stability_variables.tsv", ".test/results/env/env_stack.tif",
-              ".test/results/spA/pca/pca_pc1_pc2.png", ".test/results/spB/pca/sample_scores.tsv"):
+              ".test/results/spA/pca/pca_pc1_pc2.png", ".test/results/spA/pca/pca_pc1_pc3.pdf",
+              ".test/results/spB/pca/sample_scores.tsv", ".test/results/spB/pca/population_check.tsv"):
         assert f in files
     # one leave-one-out screening fit per population in each latlongs file
     assert sum("spA/predictors/leave_one_out/site" in f for f in files) == 13

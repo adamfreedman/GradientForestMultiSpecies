@@ -228,3 +228,41 @@ def test_genotype_pca_matches_direct_svd(tmp_path):
     info = dict(pd.read_csv(out["info"], sep="\t").values)
     assert info == {"n_individuals": 7, "snps_total": 41, "snps_not_biallelic_snp": 1, "snps_no_calls": 1,
                     "snps_invariant": 1, "snps_used": 38}
+
+
+def test_pca_population_check(tmp_path):
+    """an individual placed in another population's cluster is flagged; the rest are not"""
+    from pca_population_check import check
+    rng = np.random.default_rng(5)
+    centres = {"A": (0, 0), "B": (5, 0), "C": (0, 5), "D": (5.3, 0.2)}  # D overlaps B
+    rows = []
+    for pop, n in (("A", 8), ("B", 8), ("C", 8), ("D", 8)):
+        for j in range(n):
+            x, y = np.array(centres[pop]) + rng.normal(0, 0.3, 2)
+            rows.append((f"{pop}{j}", pop, x, y))
+    rows[0] = ("A0", "A", 5.0, 5.0 - 5.0)   # labelled A, genotypes of B
+    rows.append(("E0", "E", 2.5, 2.5))       # alone in its population
+    rows.append(("F0", "F", 0.1, 4.9))       # population of 2, one with C ...
+    rows.append(("F1", "F", 9.0, 9.0))       # ... and one far away
+    sc = pd.DataFrame(rows, columns=["sample_id", "popid", "PC1", "PC2"])
+    sc["PC3"] = rng.normal(0, 0.01, len(sc))
+    res, k = check(sc, n_pcs=4, min_ratio=2, min_spread_ratio=3)
+    assert k == 3  # only 3 PCs available
+    r = res.set_index("sample_id")
+    assert r.loc["A0", "flagged"] == "yes" and r.loc["A0", "nearest_other_pop"] in ("B", "D")
+    assert r.loc["E0", "flagged"] == "no" and "not checked" in r.loc["E0", "note"]
+    # B and D overlap: individuals sit near the other population's median but within their own spread
+    assert (r.loc[[s for s in r.index if s[0] in "BCD"], "flagged"] == "no").all()
+    assert (r.loc[[f"A{j}" for j in range(1, 8)], "flagged"] == "no").all()
+    # population of 2: its own spread cannot be estimated, so the typical spread of all populations is used
+    assert r.loc["F0", "flagged"] == "yes" and r.loc["F0", "spread_ratio"] > 3
+    assert "spread of all populations" in r.loc["F0", "note"]
+
+    # command line
+    f = tmp_path / "scores.tsv"
+    sc.to_csv(f, sep="\t", index=False)
+    run_script("pca_population_check.py", "--scores", f, "--out", tmp_path / "check.tsv")
+    out = pd.read_csv(tmp_path / "check.tsv", sep="\t", dtype=str)
+    assert out.columns.tolist() == ["sample_id", "popid", "nearest_other_pop", "dist_own", "dist_nearest_other",
+                                    "ratio", "spread_ratio", "flagged", "note"]
+    assert len(out) == len(sc) and set(out.sample_id[out.flagged == "yes"]) == set(res.sample_id[res.flagged == "yes"])

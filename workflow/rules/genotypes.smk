@@ -75,20 +75,39 @@ rule genotype_pca:
         "--out-scores {output.scores} --out-info {output.info} > {log} 2>&1"
 
 
+rule pca_population_check:
+    """Individuals closer (on the first PCs) to another population's median than to their own."""
+    input:
+        scores=sp_dir("pca/sample_scores.tsv"),
+    output:
+        sp_dir("pca/population_check.tsv"),
+    params:
+        args=(
+            f"--n-pcs {PCA_CHECK.get('n_pcs', 4)} --min-ratio {PCA_CHECK.get('min_ratio', 2)} "
+            f"--min-spread-ratio {PCA_CHECK.get('min_spread_ratio', 3)}"
+        ),
+    log:
+        f"{OUT}/logs/{{species}}/pca_population_check.log",
+    conda:
+        "../envs/py_geo.yaml"
+    shell:
+        "python {SCRIPTS}/pca_population_check.py --scores {input.scores} {params.args} --out {output} > {log} 2>&1"
+
+
 rule plot_genotype_pca:
     input:
         scores=sp_dir("pca/sample_scores.tsv"),
+        check=sp_dir("pca/population_check.tsv"),
         variance=sp_dir("pca/variance_explained.tsv"),
         info=sp_dir("pca/pca_info.tsv"),
     output:
-        pdf=sp_dir("pca/pca_pc1_pc2.pdf"),
-        png=sp_dir("pca/pca_pc1_pc2.png"),
+        expand(sp_dir("pca/pca_{pair}.{ext}"), pair=["pc1_pc2", "pc1_pc3"], ext=["pdf", "png"], allow_missing=True),
     params:
-        prefix=lambda wc, output: output.pdf[: -len(".pdf")],
+        outdir=sp_dir("pca"),
     log:
         f"{OUT}/logs/{{species}}/plot_genotype_pca.log",
     conda:
         "../envs/r_gf.yaml"
     shell:
         "Rscript {SCRIPTS}/plot_genotype_pca.R --species='{wildcards.species}' --scores={input.scores} "
-        "--variance={input.variance} --info={input.info} --out_prefix={params.prefix} > {log} 2>&1"
+        "--variance={input.variance} --info={input.info} --check={input.check} --outdir={params.outdir} > {log} 2>&1"

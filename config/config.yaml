@@ -72,6 +72,17 @@ genotypes:
   # no MAF or missingness filters: gradient forest leaves out SNPs without signal
   # (R^2 <= 0), and only SNPs in the model are tested
 
+pca:
+  # Genotype PCA (results/<species>/pca/; population structure and sample QC, not used
+  # by gradient forest). An individual is flagged in qc.html and ringed on the plots when,
+  # on the first n_pcs PCs, it is at least min_ratio times closer to another population's
+  # median than to its own AND farther than min_spread_ratio times its own population's
+  # usual distance from its median.
+  population_check:
+    n_pcs: 4
+    min_ratio: 2
+    min_spread_ratio: 3
+
 gf:
   # number of trees per forest, used for the observed fit and every randomized fit.
   # "auto": start at ntree_tuning.start and multiply by ntree_tuning.factor until two
