@@ -30,6 +30,17 @@ predictors:
 genotypes:
   min_ind_per_pop: 5      # spA overrides with 4 in the sample sheet
 
+admixture:
+  enabled: true
+  k_min: 1
+  k_max: 3
+  replicates: 3
+  cv_folds: 5
+  seed: 1
+  threads: 2
+  pong_sim_threshold: 0.97
+  stable_min_frac: 1.0
+
 gf:
   ntree: auto
   ntree_tuning:

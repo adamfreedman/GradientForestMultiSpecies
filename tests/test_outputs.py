@@ -92,6 +92,40 @@ def test_genotype_pca(outdir, sp):
     assert "Genotype PCA" not in open(os.path.join(existing(outdir), sp, "refit_sigvars", "qc_refit.html")).read()
 
 
+@pytest.mark.parametrize("outdir,sp", SP_CASES)
+def test_admixture(outdir, sp):
+    d = os.path.join(existing(outdir), sp, "admixture")
+    ks = [1, 2, 3]  # .test/config/config.yaml
+    n_ind = 123 if sp == "spA" else 80  # the PCA's individuals
+    cv = read(f"{d}/cv_error.tsv")
+    assert len(cv) == len(ks) * 3 and cv.cv_error.gt(0).all()
+    summ = read(f"{d}/k_summary.tsv")
+    assert summ.K.tolist() == ks and set(summ.stable) <= {"yes", "no"}
+    assert summ.loc[summ.K == 1, "stable"].item() == "yes"
+    sel = read(f"{d}/selected_k.tsv").iloc[0]
+    assert sel.K_cv == summ.K[summ.cv_mean.idxmin()]
+    # populations differ in allele frequencies, so K = 1 does not fit best
+    assert sel.K_cv > 1
+    sc = read(os.path.join(existing(outdir), sp, "pca", "sample_scores.tsv"), dtype={"popid": str})
+    for k in ks:
+        a = read(f"{d}/ancestry_K{k}.tsv", dtype={"popid": str})
+        assert sorted(a.sample_id) == sorted(sc.sample_id) and len(a) == n_ind
+        assert a.columns.tolist() == ["sample_id", "popid"] + [f"cluster{j + 1}" for j in range(k)]
+        assert np.allclose(a.filter(like="cluster").sum(axis=1), 1, atol=1e-3)
+    modes = read(f"{d}/selected_k_modes.tsv")
+    assert modes.groupby("mode").n_runs.first().sum() == 3
+    assert open(f"{d}/pong/output/result_summary.txt").read().count("K=") >= len(ks)
+    for p in ("admixture_selected_k", "admixture_all_k", "cv_error", "selected_k_modes"):
+        for ext in ("pdf", "png"):
+            assert os.path.getsize(f"{d}/{p}.{ext}") > 1000
+    html = open(os.path.join(existing(outdir), sp, "qc.html")).read()
+    assert "<h2>ADMIXTURE</h2>" in html
+    assert ("ADMIXTURE: K = " in html) == (sel.stable == "no")  # warning only when not stable
+    if sel.stable == "no" and sel.K_minus_1_stable == "no":
+        assert f"largest stable K below {sel.K_cv}" in html
+    assert "ADMIXTURE" not in open(os.path.join(existing(outdir), sp, "refit_sigvars", "qc_refit.html")).read()
+
+
 def selected_vars(d):
     return [v for v in open(f"{d}/predictors/selected.txt").read().split() if v]
 

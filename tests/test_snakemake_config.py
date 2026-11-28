@@ -36,8 +36,13 @@ def test_default_dag():
     for f in (".test/results/spA/qc.html", ".test/results/spB/refit_sigvars/qc_refit.html",
               ".test/results/spA/predictors/stability_variables.tsv", ".test/results/env/env_stack.tif",
               ".test/results/spA/pca/pca_pc1_pc2.png", ".test/results/spA/pca/pca_pc1_pc3.pdf",
-              ".test/results/spB/pca/sample_scores.tsv", ".test/results/spB/pca/population_check.tsv"):
+              ".test/results/spB/pca/sample_scores.tsv", ".test/results/spB/pca/population_check.tsv",
+              ".test/results/spA/admixture/runs/K3/rep3/geno.3.Q", ".test/results/spA/admixture/ancestry_K1.tsv",
+              ".test/results/spB/admixture/admixture_selected_k.png",
+              ".test/results/spB/admixture/pong/output/result_summary.txt"):
         assert f in files
+    # one ADMIXTURE run per K (1-3) and replicate (3) for each species
+    assert sum(f.endswith(".Q") and "/admixture/runs/" in f for f in files) == 2 * 3 * 3
     # one leave-one-out screening fit per population in each latlongs file
     assert sum("spA/predictors/leave_one_out/site" in f for f in files) == 13
     assert sum("spB/predictors/leave_one_out/site" in f for f in files) == 10
@@ -63,6 +68,8 @@ def test_alternative_runs_use_own_directory(config, outdir):
     (["importance_floor=0.01", "use_all_predictors=true"], "cannot be combined"),
     (["predictors={'rank_by': 'bogus'}"], "rank_by must be"),
     (["gf={'refit_significant': {'subdir': 'a/b'}}"], "plain directory name"),
+    (["admixture={'k_max': 25}"], "k_max <= 20"),
+    (["admixture={'replicates': 1}"], "replicates must be at least 2"),
 ])
 def test_bad_settings_are_rejected(config, message):
     p = dry_run(*config)

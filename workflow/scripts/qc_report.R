@@ -396,6 +396,61 @@ if (!is.null(opt$pca_png)) {
                                                 html_table(hi_miss[, .(sample_id, popid, missing_frac)], digits = 3)))
 }
 
+# ADMIXTURE (individuals; qc.html only)
+admix_html <- NULL
+if (!is.null(opt$admix_dir)) {
+  ad <- opt$admix_dir
+  aks <- fread(file.path(ad, "k_summary.tsv"))
+  asel <- fread(file.path(ad, "selected_k.tsv"))
+  kcv <- asel$K_cv
+  a_unstable <- asel$stable != "yes"
+  km1_ok <- !is.na(asel$K_minus_1) && nzchar(as.character(asel$K_minus_1))
+  # when K - 1 is not stable either: the largest stable K below the selected K
+  k_stable <- suppressWarnings(as.integer(asel$largest_stable_K_le_K_cv))
+  show_kst <- a_unstable && !is.na(k_stable) && k_stable < kcv - 1L
+  if (a_unstable) warnings <- c(warnings, sprintf(
+    "ADMIXTURE: K = %d (lowest CV error) is not stable: pong found %d modes among %d runs (largest mode: %d runs).%s",
+    kcv, asel$n_modes, asel$n_runs, asel$major_mode_runs,
+    paste0(
+      if (km1_ok) sprintf(" K = %d is %s (%d of %d runs in the largest mode).", kcv - 1L,
+                          if (asel$K_minus_1_stable == "yes") "stable" else "not stable either",
+                          as.integer(asel$K_minus_1_major_mode_runs), asel$n_runs) else "",
+      if (show_kst) sprintf(" The largest stable K below %d is K = %d.", kcv, k_stable)
+      else if (km1_ok && asel$K_minus_1_stable != "yes") sprintf(" No K below %d is stable.", kcv) else "")))
+  frac_txt <- if (asel$stable_min_frac >= 1) "all runs fall in a single mode" else
+    sprintf("at least %g%% of the runs fall in pong's largest mode", 100 * asel$stable_min_frac)
+  admix_legend <- legend(
+    "<p>Ancestry proportions estimated by ADMIXTURE for the individuals in the genotype PCA, with the same SNPs ",
+    "(no MAF, missingness or LD filter). Each bar is an individual, and its colours are the proportions of its ",
+    "genotypes assigned to each of K ancestral clusters. Individuals are grouped by population (labelled as in the ",
+    "PCA plots); populations with similar ancestry are placed next to each other (clustering of the ",
+    "population mean proportions at every K up to the selected one), and individuals within a population are sorted by its main cluster.</p>",
+    sprintf(paste0("<p>ADMIXTURE was run %d times (different random seeds) at each K from %d to %d, each with ",
+                   "cross-validation. The K with the lowest mean cross-validation (CV) error is K = <b>%d</b>. ",
+                   "Separate runs can converge to different solutions, so pong grouped the runs at each K into ",
+                   "<i>modes</i> (runs whose clusters agree). K is called stable when %s. "),
+            asel$n_runs, min(aks$K), max(aks$K), kcv, frac_txt),
+    if (a_unstable) paste0(
+      sprintf(paste0("<span class='bad'>K = %d is not stable</span>: the bar plot shows the representative ",
+                     "run of the largest mode, and K = %d is shown below it"), kcv, kcv - 1L),
+      if (show_kst) sprintf(paste0("; K = %d is not stable either, so the bottom panel shows K = %d, the ",
+                                   "largest K below %d at which the runs agree"), kcv - 1L, k_stable, kcv) else "",
+      sprintf(". The second figure shows each mode at K = %d.", kcv))
+    else sprintf("At K = %d all runs agree.", kcv),
+    "</p><p>Ancestry tables for every K are in <code>admixture/ancestry_K&lt;K&gt;.tsv</code>, CV errors in ",
+    "<code>admixture/cv_error.tsv</code>, and pong's results in <code>admixture/pong/</code>; ",
+    "<code>admixture/admixture_all_k.png</code> shows every K.</p>",
+    tech("pong (Behr et al. 2016) matches clusters between runs and joins runs whose average cluster similarity ",
+         "exceeds its threshold; modes are groups of mutually similar runs. Cluster colours are matched across K."))
+  admix_tab <- aks[, .(K, cv_mean, cv_sd, n_modes, runs_in_largest_mode = sprintf("%d/%d", major_mode_runs, n_runs),
+                       stable, selected)]
+  admix_html <- section("ADMIXTURE", admix_legend,
+                        img(file.path(ad, "admixture_selected_k.png")),
+                        if (a_unstable) img(file.path(ad, "selected_k_modes.png")),
+                        img(file.path(ad, "cv_error.png"), "60%"),
+                        html_table(admix_tab, digits = 4))
+}
+
 warn_html <- if (length(warnings)) {
   paste0('<div class="warn"><b>Warnings</b><ul>', paste0("<li>", esc(warnings), "</li>", collapse = ""), "</ul></div>")
 } else '<div class="ok">No warnings.</div>'
@@ -445,6 +500,7 @@ section(if (is_refit) "Predictors (selected from the full model)" else "Predicto
 section("SNP filtering", snp_filter_legend, html_table(snpf)),
 section("Number of trees", ntree_legend, ntree_txt, html_table(tun), if (!is.null(tun_png)) img(tun_png)),
 pca_html,
+admix_html,
 section("Populations", pops_legend, html_table(merge(sites[, .(popid, sitename, lat, long, snapped_km)], pops, by = "popid", all.x = TRUE)[order(suppressWarnings(as.numeric(popid)), popid)])),
 section("Individuals not mapped to a population",
         if (nrow(unm)) paste0("<p>Excluded from the analysis. <i>missing_in_vcf</i> = in the popmap but not the VCF; ",

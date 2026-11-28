@@ -1,5 +1,6 @@
 # Environment for running the tests: Snakemake plus the packages the Python
-# workflow scripts use (same as workflow/envs/py_geo.yaml) and pytest.
+# workflow scripts use (same as workflow/envs/py_geo.yaml, plus scipy for admixture_summary.py)
+# and pytest.
 # The R environment is created by Snakemake itself (--use-conda).
 name: gfms-test
 channels:
@@ -11,6 +12,7 @@ dependencies:
   - snakemake-minimal=9.16.3
   - numpy
   - pandas
+  - scipy               # admixture_summary.py
   - rasterio
   - geopandas
   - pyogrio
