@@ -138,6 +138,40 @@ def batch_reps(wc):
 # genotype PCA: flagging individuals that sit with another population (see config.yaml)
 PCA_CHECK = (config.get("pca") or {}).get("population_check") or {}
 
+# ADMIXTURE + pong (see config.yaml)
+_ADM = config.get("admixture") or {}
+ADMIX_ON = _flag(_ADM.get("enabled", False))
+ADMIX_K = list(range(int(_ADM.get("k_min", 1)), int(_ADM.get("k_max", 10)) + 1))
+ADMIX_REPS = int(_ADM.get("replicates", 100))
+ADMIX_CV = int(_ADM.get("cv_folds", 10))
+ADMIX_SEED = int(_ADM.get("seed", 1))
+ADMIX_THREADS = int(_ADM.get("threads", 4))
+ADMIX_SIM = float(_ADM.get("pong_sim_threshold", 0.97))
+ADMIX_STABLE_FRAC = float(_ADM.get("stable_min_frac", 0.9))
+if ADMIX_ON:
+    if not ADMIX_K or ADMIX_K[0] < 1 or ADMIX_K[-1] > 20:
+        raise ValueError("admixture: need 1 <= k_min <= k_max <= 20")
+    if len(ADMIX_K) < 2:
+        raise ValueError("admixture: need at least two values of K (k_max > k_min)")
+    if ADMIX_REPS < 2:
+        raise ValueError("admixture.replicates must be at least 2 (pong compares replicate runs)")
+    if ADMIX_CV < 2:
+        raise ValueError("admixture.cv_folds must be at least 2")
+    if not 0 < ADMIX_SIM < 1 or not 0 < ADMIX_STABLE_FRAC <= 1:
+        raise ValueError("admixture: pong_sim_threshold must be in (0, 1) and stable_min_frac in (0, 1]")
+ADMIX_PLOTS = ["admixture_selected_k", "admixture_all_k", "cv_error", "selected_k_modes"]
+
+
+def admixture_outputs(sp):
+    d = f"{OUT}/{sp}/admixture"
+    return (
+        [f"{d}/{f}" for f in ("cv_error.tsv", "k_summary.tsv", "selected_k.tsv", "selected_k_modes.tsv",
+                              "pong/output/result_summary.txt")]
+        + [f"{d}/ancestry_K{k}.tsv" for k in ADMIX_K]
+        + [f"{d}/{p}.{ext}" for p in ADMIX_PLOTS for ext in ("pdf", "png")]
+    )
+
+
 _REFIT = config["gf"].get("refit_significant") or {}
 REFIT_ON = bool(_REFIT.get("enabled", False))
 REFIT_DIR = str(_REFIT.get("subdir", "refit_sigvars"))
@@ -151,6 +185,8 @@ wildcard_constraints:
     # a fitted model: "<species>" (all predictors) or "<species>/<REFIT_DIR>" (significant predictors)
     model=f"({_SP_RE})(/{re.escape(REFIT_DIR)})?",
     batch=r"\d+",
+    k=r"\d+",
+    rep=r"\d+",
 
 
 def min_ind_per_pop(wc):
@@ -217,6 +253,8 @@ def all_outputs():
     out += [f"{OUT}/{sp}/pca/pca_{pr}.{ext}" for sp in SPECIES for pr in ("pc1_pc2", "pc1_pc3") for ext in ("pdf", "png")]
     if STABILITY_ON:
         out += [f"{OUT}/{sp}/predictors/stability_variables.tsv" for sp in SPECIES]
+    if ADMIX_ON:
+        out += [f for sp in SPECIES for f in admixture_outputs(sp)]
     for m in models():
         for p in plots:
             out += [f"{OUT}/{m}/plots/{p}.pdf", f"{OUT}/{m}/plots/{p}.png"]

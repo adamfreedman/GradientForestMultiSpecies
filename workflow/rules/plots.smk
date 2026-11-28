@@ -72,6 +72,14 @@ rule qc_report:
                                                          "variance_explained.tsv", "sample_scores.tsv", "pca_info.tsv",
                                                          "population_check.tsv")]
         ),
+        # ADMIXTURE: in qc.html only
+        admix=lambda wc: (
+            []
+            if is_refit(wc) or not ADMIX_ON
+            else [f"{OUT}/{wc.model}/admixture/{f}" for f in ("k_summary.tsv", "selected_k.tsv",
+                                                               "admixture_selected_k.png", "selected_k_modes.png",
+                                                               "cv_error.png")]
+        ),
         stability=lambda wc: (
             []
             if is_refit(wc) or not STABILITY_ON
@@ -96,6 +104,7 @@ rule qc_report:
             if input.pca
             else ""
         ),
+        admix=lambda wc, input: f"--admix_dir={os.path.dirname(input.admix[0])}" if input.admix else "",
         selection="--selection=none" if SELECT_THRESHOLD == "none" else (
             f"--importance_floor={IMPORTANCE_FLOOR:g}" if IMPORTANCE_FLOOR is not None else ""
         ),
@@ -114,7 +123,7 @@ rule qc_report:
         "--env_sites={input.sites} --predictors={input.predictors} --tuning={input.tuning} "
         "--ntree={input.ntree} --summary={input.summary} --pvals={input.pvals} {params.thr} "
         "--heatmap={input.heatmap} --snp_pvals={input.snp_pvals} --unmapped={input.unmapped} {params.refit} "
-        "{params.stability} {params.selection} {params.pca} "
+        "{params.stability} {params.selection} {params.pca} {params.admix} "
         "--out={output.html} --out_tuning_png={output.tuning_png} > {log} 2>&1"
 
 

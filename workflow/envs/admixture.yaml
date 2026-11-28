@@ -1,0 +1,16 @@
+# ADMIXTURE (ancestry proportions), plink2 (VCF -> PLINK bed) and pong (agreement
+# of replicate runs within each K)
+channels:
+  - conda-forge
+  - bioconda
+  - nodefaults
+dependencies:
+  - python=3.12
+  - admixture=1.3.0
+  - plink2
+  - numpy=1.26            # pong 1.5 requires numpy < 2
+  - pandas
+  - scipy
+  - pip
+  - pip:
+      - pong==1.5

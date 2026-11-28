@@ -83,6 +83,25 @@ pca:
     min_ratio: 2
     min_spread_ratio: 3
 
+admixture:
+  # ADMIXTURE ancestry proportions (results/<species>/admixture/; population structure,
+  # not used by gradient forest). Same individuals and SNPs as the genotype PCA (no MAF,
+  # missingness or LD filter). ADMIXTURE is run `replicates` times (different seeds) at
+  # every K from k_min to k_max with cv_folds-fold cross-validation; the K with the
+  # lowest mean CV error is selected. pong groups the replicate runs at each K into
+  # modes (runs whose clusters match with similarity > pong_sim_threshold); K counts as
+  # stable when pong's largest mode holds at least stable_min_frac of the runs. qc.html
+  # warns when the selected K is not stable and shows K - 1 as well.
+  enabled: true
+  k_min: 1
+  k_max: 10               # at most 20
+  replicates: 100         # many runs per K, so pong's modes show how often runs agree
+  cv_folds: 10
+  seed: 1                 # replicate r uses seed + r - 1
+  threads: 4
+  pong_sim_threshold: 0.97
+  stable_min_frac: 0.9    # 0.9 = at least 90% of runs in pong's largest mode (1.0 = all)
+
 gf:
   # number of trees per forest, used for the observed fit and every randomized fit.
   # "auto": start at ntree_tuning.start and multiply by ntree_tuning.factor until two
